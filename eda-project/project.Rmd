@@ -1,0 +1,281 @@
+---
+title: "Final Project"
+author: "Yu Gu"
+date: 'STAT 131A Fall 2021"'
+output:
+  pdf_document
+header-includes:
+- \usepackage{framed}
+- \usepackage{xcolor}
+- \let\oldquote=\quote
+- \let\endoldquote=\endquote
+- \colorlet{shadecolor}{orange!15}
+- \renewenvironment{quote}{\begin{shaded*}\begin{oldquote}}{\end{oldquote}\end{shaded*}}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+library(ggplot2)
+library(gplots)
+library(GGally)
+library(ggcorrplot)
+library(pheatmap) 
+library(alluvial)
+library(leaps)
+library(dplyr)
+```
+
+### Visualization
+
+1. Importing the data: Read the data into R. Make sure your categorical variables are factors. (5
+points).
+
+1.1 Import data
+Note that ID is removed here, since it will not be useful for data analysis.
+```{r}
+#import data
+cholang <- read.csv('cholangitis.csv', header = T, stringsAsFactors = T, na.strings = "NA")
+cholang <- cholang[,-1]
+summary(cholang)
+```
+1.2 Data Cleaning
+I first change the NA data in the 'drug' column into 'NotParticipated', representing another factor level.
+Then, I change the NA data in numerical columns into the median value and the NA data in categorical columns into the most frequent factor level.
+Actually, we can directly remove these NA data, but since the dataset is rather small, I somehow don't want to kick out some rows randomly, therefore, I choose to do some transformation in the NA data.
+```{r}
+#change the NA data into another factor level in the 'drug' column
+cholang$drug <- as.character(cholang$drug)
+cholang$drug <- ifelse(is.na(cholang$drug), 'NotParticipated', cholang$drug)
+cholang$drug <- as.factor(cholang$drug)
+
+#change the NA data in numerical columns into the median value
+cholang_num <- select_if(cholang, is.numeric)
+head(cholang_num)
+cholang_num <- as.data.frame(apply(cholang_num, 2, function(x){
+  x[is.na(x)] <- median(x, na.rm = T)
+  return(x)
+}))
+
+#change the NA data in categorical columns into the most frequent factor level
+cholang_cate <- select_if(cholang, is.factor)
+head(cholang_cate)
+cholang_cate <- as.data.frame(apply(cholang_cate, 2, function(x){
+  x[is.na(x)] <- names(which.max(table(x)))
+  return(x)
+}))
+```
+
+2. Basic exploratory data analysis: Perform exploratory data analysis of the data, using any appropriate tools we have learned. Note any interesting features of the data. (20 points).
+```{r}
+# pairs plot
+na.omit(cholang) %>% 
+  select(age, bilirubin, cholesterol, albumin, copper, alk_phos, sgot, tryglicerides, platelets, prothrombin, stage, drug, sex) %>% 
+  ggpairs(aes(fill = drug))
+```
+
+```{r}
+cholang_num %>% 
+  cor() %>% 
+  ggcorrplot(type = "upper",
+             hc.order = T,
+             lab = T, 
+             sig.level = .5)
+```
+From the corrolation plot of numeric data, we can see nearly all numeric data has a small correlation value, therefore, they can be considered as independent variables.
+
+
+```{r}
+ggplot(cholang, aes(n_days, cholesterol, color = sex)) + geom_line()
+ggplot(cholang, aes(n_days, cholesterol, color = status)) + geom_line()
+```
+From the previous plot of cholesterol change with days, we can see that female seems to have a higher cholesterol level than man, and the cholesterol level drops gradually as time goes, ignoring some outliers.
+
+```{r}
+par(mfrow=c(2,3))
+hist(cholang$age,main="age")
+hist(cholang$bilirubin,main="bilirubin")
+hist(cholang$cholesterol,main="cholesterol")
+hist(cholang$copper,main="copper")
+hist(cholang$alk_phos,main="alk_phos")
+hist(cholang$platelets,main="platelets")
+```
+From the histogram before, we can see that most of the numerical values are not normally distributed.
+The age is normally distributed, which will be good for analysis. And most of the chemicals are right-skewed.(I didn't show all of the plots, but the trend is basically the same.)
+
+```{r}
+cholang_cate$Freq<-1
+cholangCateAggregates<-aggregate(Freq ~ .,data=cholang_cate,FUN=sum)
+alluvial(cholangCateAggregates[,-ncol(cholangCateAggregates)], freq=cholangCateAggregates$Freq, 
+         col=palette())
+
+
+alluvial(cholangCateAggregates[,c(1:3)], freq=cholangCateAggregates$Freq, 
+         col= ifelse(cholangCateAggregates$status == "D", "orange", "grey"))
+```
+```{r}
+par(mfrow = c(1, 2))
+barplot(with(cholang,table(sex,status)),beside=TRUE,legend=TRUE,col=palette()[1:2])
+barplot(with(cholang,table(drug,status)),beside=TRUE,legend=TRUE,col=palette()[5:7])
+```
+From the alluvial plot and barplot, we can see some characteristics for categorical variables.
+(1) Female patients are a lot more than male patients in this dataset, and seems to have a higher rate to survive. Since the male data is small, this judgement may be biased.
+(2) The patients have D-penicillamine or placebo does not show a high deviation for the rate of survival.
+(3) A large porportion of patients who are cured later don't have symptoms like ascites,hepatomegaly,spiders,edema.
+
+
+```{r}
+par(mfrow=c(2,3))
+boxplot(cholang$n_days~cholang$stage,col=palette()[2:5],outline=FALSE)
+boxplot(cholang$n_days~cholang$status,col=palette()[6:8],outline=FALSE)
+boxplot(cholang$n_days~cholang$ascites,col=palette()[2:3],outline=FALSE)
+boxplot(cholang$n_days~cholang$edema,col=palette()[5:7],outline=FALSE)
+boxplot(cholang$bilirubin~cholang$edema,col=palette()[2:5],outline=FALSE)
+boxplot(cholang$prothrombin~cholang$stage,col=palette()[5:8],outline=FALSE)
+```
+From the boxplot before we can see some trends:
+(1) The latter stage will have shorter days of living (which is consistent with intuition) on average.
+(2) The patients that are dead later have shorter days till the end of the survey on average.
+(3) and (4) The patients don't have ascites or edema will have a longer day for living on average.
+(5) The patients who have edema will have a higher level of bilirubin on average.
+(6) The patients in the 4th stage will have a higher level of prothrombin on average.
+
+### Multivariate Regression
+
+## 1.  Multivariate regression analysis
+Perform a regression analysis of the response (number of days) on the explanatory variables. Describe here whether you transformed your data or covariates, or excluded any observations, and why. Here you might include diagnostic plots (i.e. for transformations you considered but did not use), but only show those that are necessary for explaining your choices. (20 points).
+
+(The data cleaning part was done before.)
+```{r}
+lmFull = lm(n_days ~ ., cholang)
+summary(lmFull)
+```
+```{r}
+# Code for diagnostics
+par(mfrow = c(2, 3))
+plot(lmFull, which=1:6)
+```
+## 2. Variable selection: 
+Perform variable selection to select a suitable model involving a subset of your
+explanatory variables. You can use either stepwise methods or regression subsets in conjunction with
+cross validation. (10 points).
+1. Variable selection with categorical variables
+```{r}
+bCholang = regsubsets(n_days ~ ., cholang)
+summary(bCholang)$out
+```
+2. Variable selection without categorical variables
+```{r}
+bCholang2 = regsubsets(n_days ~ ., cholang_num)
+summary(bCholang2)$out
+```
+
+```{r}
+set.seed(78912)
+permutation<-sample(1:nrow(cholang_num))
+folds <- cut(1:nrow(cholang_num),breaks=10,labels=FALSE)
+predErrorMat<-matrix(nrow=10,ncol=nrow(summary(bCholang2)$which))
+
+for(i in 1:10){
+    #Segement your data by fold using the which() function 
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- cholang_num[permutation,][testIndexes, ]
+    trainData <- cholang_num[permutation,][-testIndexes, ]
+    #Use the test and train data partitions however you desire...
+    predError<-apply(summary(bCholang2)$which[,-1],1,function(x){
+        lmObj<-lm(trainData$n_days ~ .,data=trainData[,-1][,x,drop=FALSE])
+        testPred<-predict(lmObj,newdata=testData[,-1])
+        mean((testData$n_days-testPred)^2)
+    })
+    predErrorMat[i,]<-predError
+}
+colMeans(predErrorMat)
+```
+```{r}
+LOOCV<-function(lm){
+    vals<-residuals(lm)/(1-lm.influence(lm)$hat)
+    sum(vals^2)/length(vals)
+}
+calculateCriterion<-function(x=NULL,y,dataset,lmObj=NULL){
+    #dataset contains only explanatory variables
+    #x is a vector of logicals, length equal to number of explanatory variables in dataset, telling us which variables to keep
+    #sigma2 is estimate of model on full dataset
+    # either x or lmObj must be given to specify the smaller lm model
+    sigma2=summary(lm(y~.,data=dataset))$sigma^2
+    if(is.null(lmObj)) lmObj<-lm(y ~ ., data=dataset[,x,drop=FALSE]) #don't include intercept
+    sumlmObj<-summary(lmObj)
+    n<-nrow(dataset)
+    p<-sum(x)
+    RSS<-sumlmObj$sigma^2*(n-p-1)
+    c(R2=sumlmObj$r.squared,
+        R2adj=sumlmObj$adj.r.squared,
+        "RSS/n"=RSS/n,
+        LOOCV=LOOCV(lmObj),
+        Cp=RSS/n+2*sigma2*(p+1)/n,
+        CpAlt=RSS/sigma2-n+2*(p+1),
+        AIC=AIC(lmObj), # n*log(RSS/n)+2*p +constant,
+        BIC=BIC(lmObj) # n*log(RSS/n)+p*log(n) + constant
+    )
+}
+
+critCholang<-apply(summary(bCholang2)$which[,-1],1,calculateCriterion,
+    y=cholang$n_days,
+    dataset=cholang_num[,-1])
+
+critCholang<-t(critCholang)
+critCholang
+data.frame(
+  AIC = which.min(abs(critCholang[,"AIC"])),
+  LOOCV = which.min(abs(critCholang[,"LOOCV"]))
+)
+```
+Based on AIC, model (6) is the best model with the lowest AIC. 
+However, based on LOOCV, model (5) is the best model with the lowest LOOCV.
+Jointly consider the prediction error of cross-validation, I decide to choose the 5th model, which is n_days ~bilirubin+albumin+copper+alk_phos+stage
+
+## 3. Regression diagnostics: 
+Look at diagnostic plots of this final model and comment on whether any
+of the regression assumptions are obviously violated for this dataset and the final model. (10 points)
+
+```{r}
+# Code for diagnostics
+par(mfrow = c(2, 3))
+plot(lm(n_days ~bilirubin+albumin+copper+alk_phos+stage,data = cholang), which=1:6)
+```
+There are still some problems with this model.
+We can see there's a non-linear (quadratic) relation in the Residuals vs Fitted plot, and increasing pattern the Scale-Location plot, suggesting that the distribution of residuals is heteroscedastic.
+From the QQ plot, we can see that residuals are normally distributed, suggesting the distribution is normal and the model is valie.\
+From the Cook's distance plot and Residuals vs Leverage plot, we can see that there are some outliers such as 56, 40 and 55.\
+The next steps can be: (1)remove outliers; (2) change the model into a non-linear model, such as a quadratic model.
+
+
+
+# Logistic Regression
+Fit a logistic regression model for the survival status of a patient at the end of the study, given all the
+explanatory variables (remember, you are considering status as binary, ignoring the patients who receive
+transplants). You may also perform variable selection. Comment on your model, with visualizations, as in
+the , text. (15 points)
+```{r}
+cholang2 = cholang[-which(cholang$status == "CL")]
+set.seed(123)
+nTest<-.1*nrow(cholang2)
+whTest<-sample(1:nrow(cholang2),size=nTest)
+test<-cholang2[whTest,]
+train<-cholang2[-whTest,]
+glm <- glm(status ~.,family=binomial(link='logit'),data=train)
+summary(glm)
+```
+
+```{r}
+anova(glm, test="Chisq")
+```
+Note that n_days, bilirubin, alk_phos, prothombin is sigificant variable and are useful for decreasing the deviation.
+
+```{r}
+fitted.results <- predict(glm,newdata=test,type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+new.status <- ifelse(test$status == "D",1,0)
+misClasificError <- mean(fitted.results != new.status)
+print(paste('Accuracy',1-misClasificError))
+```
+The prediction accuracy is 78%, a pretty good result for survival prediction. Therefore, the model is credible.
+In fact, I've tried to do the stepwise selection here, but found out the prediction accuracy becomes worse once we do variable selection. Since the original dataset is not big, I decide to leave it with the original model.

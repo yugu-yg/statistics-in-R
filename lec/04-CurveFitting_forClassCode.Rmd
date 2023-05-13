@@ -1,0 +1,633 @@
+# Bring in the College Data
+Do not forget to change directory for where the data will be (see 01Probability_forClassCode.Rmd)
+
+```{r }
+dataDir<-"../finalDataSets"
+# dataDir<-"."
+```
+
+We will start by reading in the data of college information
+
+```{r }
+scorecard <- read.csv(file.path(dataDir,"college.csv"), stringsAsFactors = FALSE)
+```
+
+We will exclude those that are for-profit institutes:
+
+```{r }
+scorecard<-scorecard[-which(scorecard$CONTROL==3),]
+xlab="Out-of-state tuition fee"
+ylab="Full time student retention rate"
+```
+
+Let's plot tuition costs and retention rate of students:
+
+```{r }
+plot(scorecard[,c("TUITIONFEE_OUT","RET_FT4")],xlab=xlab,ylab=ylab)
+```
+
+Let's print out those observations that have 0% retention rate
+
+```{r }
+scorecard[scorecard[,"RET_FT4"]==0,]
+```
+
+This seems odd. For now we will drop this value, though if we were going to go forward more seriously, we'd need to investigate this.
+
+```{r }
+scorecard<-scorecard[-which(scorecard[,"RET_FT4"]==0),]
+plot(scorecard[,c("TUITIONFEE_OUT","RET_FT4")],xlab=xlab,ylab=ylab)
+```
+
+Here is code to color the private colleges separately from the public. The variable `CONTROL` indicates whether it is private (=2) or public (=1). Notice how I identify the colors using the numeric index of 1 or 2 (so =1 is red). 
+
+```{r }
+plot(scorecard[,c("TUITIONFEE_OUT","RET_FT4")],col=c("red","black")[scorecard[,"CONTROL"]],xlab=xlab,ylab=ylab)
+legend("bottomright",c("public","private"),fill=c("red","black"))
+```
+
+To make it simple going forward, we are going to make datasets that are just private or just public
+
+```{r }
+private<-subset(scorecard,CONTROL==2) 
+# equivalent to 
+# private<-scorecard[scorecard[,"CONTROL"]==2,]
+public<-subset(scorecard,CONTROL==1) 
+# equivalent to 
+# public<-scorecard[scorecard[,"CONTROL"]==1,]
+```
+
+# Estimating a Linear Model
+Here we plot the scatter plot, with lines drawn. The choices of which lines isn't important here -- basically I picked them arbitrary -- but notice the use of `abline`. If the argument is `v=` or `h=` then you get a vertical/horizontal line. But if the arguments are `a=` and `b=`, then you are giving the intercept and slope of the line. 
+
+```{r }
+plot(private[,c("TUITIONFEE_OUT","RET_FT4")],col="black")
+m<-colMeans(private[,c("TUITIONFEE_OUT","RET_FT4")])
+abline(h=m[2],col="red")
+abline(a=.4,b=(m[2]-.4)/m[1],col="red")
+abline(a=.9,b=(m[2]-.9)/m[1],col="red")
+points(m[1],m[2],pch=19,cex=2)
+```
+
+Further notice the use of ` colMeans ` to get the mean of each column. There is similarly ` colSums `, ` rowMeans `, `rowSums `, etc.
+
+Now we draw a scatter plot with the line fit by least-squares regression. Note now I can give the output from a least-squares fit (given by `lm`). We will look at the `lm` function more later. But for now notice how if I give it to `abline` it will draw the regression line on top of our scatter plot. 
+
+```{r }
+plot(private[,c("TUITIONFEE_OUT","RET_FT4")],col="black",main="Minimize Least Squares")
+abline(lm(RET_FT4~TUITIONFEE_OUT,data=private),col="red",lwd=3)
+```
+
+`lm` is the function that will find the least squares fit. Just typing it at the command line will give the coefficients calculated. 
+
+```{r }
+# just print output
+lm(RET_FT4~TUITIONFEE_OUT,data=private)
+```
+
+We can also save this output as an object
+
+```{r }
+# save as object to have results:
+lmPrivate<-lm(RET_FT4~TUITIONFEE_OUT,data=private)
+```
+
+But there's actually a lot more created by `lm` that doesn't show up when you just print out the object. 
+
+```{r }
+names(lmPrivate)
+```
+
+The actual values of the least squares line are saved as the `coefficients` element of the list. You can access them via standard list usage: 
+
+```{r }
+# first way to get coefficients: list value
+lmPrivate$coefficients
+```
+
+Or you can use a built-in function `coef` to grab them.
+
+```{r }
+# second way: built in function
+coef(lmPrivate)
+
+
+
+knitr::include_graphics("../staticFilesForLectures/Tshirt1999.pdf")
+```
+
+**Absolute error** Here we use the ` rq ` function in the ` quantreg ` package to find the coefficients for minimizing absolute error.  The argument ` tau ` is set to `0.5 ` to signify we want average absolute error (other choices of ` tau ` could choose different error). 
+
+```{r }
+library(quantreg)
+rqPrivate<-rq(RET_FT4~TUITIONFEE_OUT,data=private,tau=0.5)
+```
+
+We plot the results of both least squares and absolute error below. 
+
+```{r }
+plot(private[,c("TUITIONFEE_OUT","RET_FT4")],col="black",main="Minimize Least Squares",xlab=xlab,ylab=ylab)
+abline(lmPrivate,col="red",lwd=3)
+abline(rqPrivate,col="blue",lwd=3)
+legend("bottomright",c("Squared error","Absolute error"),fill=c("red","blue"))
+```
+
+## Bootstrap Confidence Intervals
+The following function creates bootstrap confidence intervals comparing two groups. 
+The input is like the permutation.test I wrote above: the two vectors of data, the function `FUN` that defines your statistic, and the number of repetitions. It returns a list with the confidence interval and the vector of bootstrapped statistics.  
+
+```{r }
+bootstrapLM <- function(y,x, repetitions, confidence.level=0.95){
+    # calculate the observed statistics
+  stat.obs <- coef(lm(y~x))
+  # calculate the bootstrapped statistics
+  bootFun<-function(){
+	  sampled <- sample(1:length(y), size=length(y),replace = TRUE)
+	  coef(lm(y[sampled]~x[sampled]))
+  }  
+  stat.boot<-replicate(repetitions,bootFun())
+  nm <-deparse(substitute(x))
+  row.names(stat.boot)[2]<-nm
+  level<-1-confidence.level
+  confidence.interval <- apply(stat.boot,1,quantile,probs=c(level/2,1-level/2))
+    return(list(confidence.interval = cbind("lower"=confidence.interval[1,],"estimate"=stat.obs,"upper"=confidence.interval[2,]), bootStats=stat.boot))
+}
+```
+
+We run this function with our college data. Notice that I use 'with', rather than just calling `bootstrapLM` with `private$RET_FT4` and `private$TUITIONFEE_OUT` as the input. This is for the sole purpose so that my output is prettier and says `TUITIONFEE_OUT` as the header for my confidence interval, rather than `private$TUITIONFEE_OUT`. 
+
+```{r }
+privateBoot<-with(private,bootstrapLM(y=RET_FT4,x=TUITIONFEE_OUT,repetitions=10000))
+privateBoot$conf
+```
+
+Notice, if you haven't already, that when I use the `$` to access an element of a list or data.frame, that I don't have to put down the whole name (e.g. `confidence.interval`), as long as it uniquely identifies one of the names (and since my other name for this output is `bootStats`, I can just use `conf`). However, if I use the bracket version to access it, I have to write out the whole name. 
+
+```{r }
+# this works
+privateBoot[["confidence.interval"]]
+# this doesn't (just returns NULL)
+privateBoot[["conf"]]
+```
+
+Using the wrong name doesn't give an error however, it just returns `NULL`, meaning the element named `conf` was empty/undefined. 
+
+```{r }
+# We will again print out the confidence interval for only the slope, only we will multiply by 10,000 to get the change for a 10,000 dollar increase, rather than 1 dollar. 
+# increments of $10,000 for the slope
+privateBoot$conf[2,]*10000
+```
+
+Here we plot different lines that correspond to the limits of the confidence intervals (both intercept and slope).
+
+```{r }
+plot(private[,c("TUITIONFEE_OUT","RET_FT4")],col="black")
+abline(a=privateBoot$conf[1,1],b=privateBoot$conf[2,1],col="red",lwd=3)
+abline(a=privateBoot$conf[1,3],b=privateBoot$conf[2,3],col="blue",lwd=3)
+abline(a=privateBoot$conf[1,1],b=privateBoot$conf[2,3],col="green",lwd=3)
+abline(a=privateBoot$conf[1,3],b=privateBoot$conf[2,1],col="yellow",lwd=3)
+abline(lmPrivate,lwd=3)
+```
+
+## Parametric Models
+Now we can use the `summary` of our lm result to get a more informative summary of our least squares fit. 
+
+```{r }
+summary(lmPrivate)
+```
+
+The `confint` will give the confidence intervals for the coefficients of the 
+`lm` fit (i.e. based on the parametric model)
+
+```{r }
+confint(lmPrivate)
+```
+
+## Comparing Parametric and Bootstrap CI
+We will combine the bootstrap and parametric confidence intervals of $\beta_1$ into one matrix
+
+```{r }
+b1CI<-rbind(c(lower=confint(lmPrivate)[2,1],estimate=unname(coef(lmPrivate)[2]),upper=confint(lmPrivate)[2,2]),privateBoot$conf[2,])
+print(b1CI)
+```
+
+We can plot these confidence intervals side-by-side. Note that use `par(mar=...)` to define how much space is on each side of my plot, in the form of a vector `c(bottom, left, top, right)`, i.e. the amount of space around the plot for these four sides. The default (see help of `par`) is `c(5, 4, 4, 2) + 0.1`. I am going to increase the amount for the x-axis so that there is space for my labels to be turned sideways.
+
+```{r }
+library(gplots)
+par(mar=c(8,4,4,1))
+plotCI(b1CI[,2],ui=b1CI[,3] ,li=b1CI[,1],main="compare confidence intervals",col=c("blue","red"),pch=19,xaxt="n",xlim=c(0,3))
+axis(1,at=c(1,2),labels=c("Parameteric","Bootstrap"),las=2)
+```
+
+## Prediction Intervals
+We can predict a value using our coefficients. Here we consider prediction at the value 20,000
+
+```{r }
+coef(lmPrivate)[1]+coef(lmPrivate)[2]*20000
+```
+
+There is also a function `predict` that does this for you that is useful, particularly if you have more complicated models. Its input is rather fussy, however. You have to give the argument `newdata`, to give the values you want to predict (so you can do multiple predictions at one time), and the fussy part is that `newdata` has to be a data.frame of the same format as your original data that you ran ` lm ` on. In particular, it has to have the same column names. 
+
+```{r }
+predict(lmPrivate, newdata=data.frame(TUITIONFEE_OUT=20000))
+```
+
+We can use the `predict` function to give both confidence and prediction intervals for our predictions.
+
+```{r }
+predict(lmPrivate, newdata=data.frame(TUITIONFEE_OUT=20000),interval="confidence")
+predict(lmPrivate, newdata=data.frame(TUITIONFEE_OUT=20000),interval="prediction")
+```
+
+Now we plot prediction intervals using the `predict` function for a wide range of $x_i$. First we calculate the confidence and prediction intervals for a range of tuition values
+
+```{r }
+tuit<-seq(2000,60000,by=1000)
+cint<-predict(lmPrivate,newdata=data.frame(TUITIONFEE_OUT=tuit),interval="confidence")
+pint<-predict(lmPrivate,newdata=data.frame(TUITIONFEE_OUT=tuit),interval="prediction")
+```
+
+This returns a matrix with three columns: the estimate, and the lower/upper values of the interval. We will plot the data and the prediction line. Then we will plot the intervals as lines as well. We could use `lines` separately for the upper and lower. But we will use a handy function called `matlines` that plots (as lines) each column of the matrix against an x. (there's also a `matplot` and `matpoints` that correspond to `plot` and `points`).
+
+```{r }
+plot(private[,c("TUITIONFEE_OUT","RET_FT4")],col="black",main="Minimize Least Squares",xlab=xlab,ylab=ylab)
+abline(lm(RET_FT4~TUITIONFEE_OUT,data=private),col="black",lwd=3)
+matlines(tuit,cint[,-1],lty=2,lwd=3,col="red")
+matlines(tuit,pint[,-1],lty=3,lwd=3,col="blue")
+legend("bottomright",c("Prediction","Conf. Int","Pred Int"),lty=c(1,2,3),col=c("black","red","blue"),lwd=3)
+```
+
+By default, `predict` just returns the predictions for the x-values of the observed data used in fitting the line, if you don't provide a `newdata` argument
+
+Notice that `predict` is a general function that will work for many curve fitting functions. If we type help of `predict` it is not helpful because that's the generic function. If we want help to see what we can do for the predict of a lm response, we need to look at help of `predict.lm`. Uncomment the code below to see the difference. 
+
+```{r }
+# help(predict)
+# help(predict.lm)
+```
+
+## Polynomial Models
+Now we consider the relationship of retention and tuition to average SAT score ` SAT_AVG_ALL `, for both public and private institutes. Notice I can quickly draw the regression line by putting the call to `lm ` inside the ` abline ` call.
+
+```{r }
+par(mfrow=c(2,2))
+plot(RET_FT4~SAT_AVG_ALL,data=public,main="Public")
+abline(lm(RET_FT4~SAT_AVG_ALL,data=public))
+plot(TUITIONFEE_OUT~SAT_AVG_ALL,data=public,main="Public")
+abline(lm(TUITIONFEE_OUT~SAT_AVG_ALL,data=public))
+
+plot(RET_FT4~SAT_AVG_ALL,data=private,main="Private")
+abline(lm(RET_FT4~SAT_AVG_ALL,data=private))
+plot(TUITIONFEE_OUT~SAT_AVG_ALL,data=private,main="Private")
+abline(lm(TUITIONFEE_OUT~SAT_AVG_ALL,data=private))
+```
+
+We will fit a quadratic model, i.e. where `SAT_AVG_ALL` is both linear and quadratic term in predicting our variables. We use the same function (`lm`) and now our formula has both `SAT_AVG_ALL` as well as `SAT_AVE_ALL^2` for predicting our y (either `RET_FT4` or `TUITIONFEE_OUT`). We put `I()` around the quadratic term to make sure that `lm` recognizes the quadratic correctly. . 
+
+```{r }
+modelRET2<-lm(RET_FT4~SAT_AVG_ALL+I(SAT_AVG_ALL^2),data=private)
+modelTUT2<-lm(TUITIONFEE_OUT~SAT_AVG_ALL+I(SAT_AVG_ALL^2),data=private)
+```
+
+Now we will plot the fitted quadratic curve. I define a function    ` quadCurve` that will plot a quadratic function from a vector of coefficients. 
+
+```{r }
+quadCurve<-function(x,cf){cf[1]+cf[2]*x+cf[3]*x^2}
+```
+
+Then we can find the coefficients from ` lm ` fitting the model using the function `coef `.
+
+```{r }
+coefRET2<-coef(modelRET2)
+coefTUT2<-coef(modelTUT2)
+```
+
+ Now we can plot the quadratic curves using those coefficients. 
+
+```{r }
+par(mfrow=c(1,2))
+plot(RET_FT4~SAT_AVG_ALL,data=private,main="Private schools, Retention")
+curve(quadCurve(x,cf=coefRET2),add=TRUE,col="red",lwd=2)
+plot(TUITIONFEE_OUT~SAT_AVG_ALL,data=private,main="Private schools, Tuition")
+curve(quadCurve(x,cf=coefTUT2),add=TRUE,col="red",lwd=2)
+```
+
+We repeat the same code, only now fitting a cubic curve.
+
+```{r }
+modelRET3<-lm(RET_FT4~SAT_AVG_ALL+I(SAT_AVG_ALL^2)+I(SAT_AVG_ALL^3),data=private)
+modelTUT3<-lm(TUITIONFEE_OUT~SAT_AVG_ALL+I(SAT_AVG_ALL^2)+I(SAT_AVG_ALL^3),data=private)
+cubicCurve<-function(x,cf){cf[1]+cf[2]*x+cf[3]*x^2+cf[4]*x^3}
+par(mfrow=c(1,2))
+plot(RET_FT4~SAT_AVG_ALL,data=private,main="Private schools")
+curve(cubicCurve(x,cf=coef(modelRET3)),add=TRUE,col="red",lwd=2)
+plot(TUITIONFEE_OUT~SAT_AVG_ALL,data=private,main="Private schools")
+curve(cubicCurve(x,cf=coef(modelTUT3)),add=TRUE,col="red",lwd=2)
+
+
+
+
+
+par(mfrow=c(1,1))
+curve(log,600,1600)
+
+
+
+par(mfrow=c(1,1))
+logShift<-function(x){log(x-550)}
+curve(logShift,600,1600)
+```
+
+# Loess Models
+The following is code to calculate the running mean/median (using ` rollmedian ` and ` rollmean ` in ` zoo ` package) to describe the relationship between variables x and y. This code is not particularly important and mainly for instruction purposes, since the LOESS fit is a much better way to do this and doesn't use these functions. 
+
+```{r }
+library(zoo)
+#put the response in order of x data
+xorder<-private$SAT_AVG_ALL[order(private$SAT_AVG_ALL)]
+yorder<-private$RET_FT4[order(private$SAT_AVG_ALL)] 
+# find the predictions for different window sizes
+ypred11<-rollmedian(yorder,k=11)
+xpred11<-rollmedian(xorder,k=11)
+ypred51<-rollmedian(yorder,k=51)
+xpred51<-rollmedian(xorder,k=51)
+ypred101<-rollmedian(yorder,k=101)
+xpred101<-rollmedian(xorder,k=101)
+par(mfrow=c(1,1))
+plot(xorder,yorder,main="Running Median Curve",xlab="SAT_AVG_ALL",ylab="RET_FT4")
+lines(xpred11,ypred11,col="red",lwd=3)
+lines(xpred51,ypred51,col="blue",lwd=3)
+lines(xpred101,ypred101,col="green",lwd=3)
+legend("bottomright",c("k=11","k=51","k=101"),fill=c("red","blue","green"),title="window size")
+```
+
+Now we are going to do loess, and compare it to running mean. Since loess is working with means, and before we did a rolling median, we are going to calculate the rolling mean 
+
+```{r }
+ypred11_mean<-rollmean(yorder,k=11)
+ypred51_mean<-rollmean(yorder,k=51)
+```
+
+In the next plot we plot the moving average in the first plot, and the loess smoothing in the second plot. Notice that the function that does loess smoothing is `loess.smooth` and I can apply `lines` directly to it to plot the result ontop of my data. `degree=0` means to take smoothed means (we'll see later we can use other options too). `span` controls the width of our smoothing, like bandwidth for `density`.
+
+I get a lot of warnings on these calls because I am picking not very logical parameters for the `span ` argument for illustration purposes. 
+
+```{r }
+par(mfrow=c(1,2))
+plot(xorder,yorder,main="Moving Average",xlab="SAT_AVG_ALL",ylab="RET_FT4")
+lines(xpred11,ypred11_mean,col="red",lwd=3)
+lines(xpred51,ypred51_mean,col="blue",lwd=3)
+legend("bottomright",c("k=11","k=51"),fill=c("red","blue"),title="window size")
+plot(xorder,yorder,main="Kernel Smoothing")
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.01,degree=0),col="red",lwd=3)
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.1,degree=0),col="blue",lwd=3)
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,degree=0),col="green",lwd=3)
+legend("bottomright",c("span=0.01","span=0.08","span=2/3 (default)"),fill=c("red","blue","green"),title="window size")
+```
+
+Now we consider using different fits in our local window. Specifically using the mean (`degree=0`), versus a local line (`degree=1`) and a local quadratic fit (`degree=2`).
+
+```{r }
+par(mfrow=c(2,2))
+plot(xorder,yorder,main="Mean")
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.01,degree=0),col="red",lwd=3)
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.1,degree=0),col="blue",lwd=3)
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,degree=0),col="green",lwd=3)
+legend("bottomright",c("span=0.01","span=0.1","span=2/3"),fill=c("red","blue","green"),title="window size")
+plot(xorder,yorder,main="Linear Regression")
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.01,degree=1),col="red",lwd=3)
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.1,degree=1),col="blue",lwd=3)
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,degree=1),col="green",lwd=3)
+legend("bottomright",c("span=0.01","span=0.1","span=2/3"),fill=c("red","blue","green"),title="window size")
+plot(xorder,yorder,main="Quadratic Regression")
+#lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.01,degree=2),col="red",lwd=3) #can't run this because span is too small for quadratic
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,span=0.1,degree=2),col="blue",lwd=3)
+lines(loess.smooth(x=private$SAT_AVG_ALL,y=private$RET_FT4,degree=2),col="green",lwd=3)
+legend("bottomright",c("span=0.01","span=0.08","span=2/3"),fill=c("red","blue","green"),title="window size")
+```
+
+# Plotting a lot of data
+Now we consider the data you used in labs on craigs list rentals. We plot the price against the size of the rental.
+
+```{r }
+craigs<-read.csv(file.path(dataDir,"craigslist.csv"),header=TRUE,stringsAsFactors=TRUE)
+plot(price~size,data=craigs,xlim=c(0,5000))
+```
+
+Now we do the same thing, only now we draw a loess smoothing line on top of the data so that we can have a better sense of the pattern in the data. 
+
+```{r }
+loessCraigs<-loess.smooth(y=craigs$price,x=craigs$size)
+plot(price~size,data=craigs,xlim=c(0,3000),ylim=c(0,20000))
+lines(loessCraigs,col="red",lwd=3)
+```
+
+## 2-D Density Plots
+The library `hexbin` gives a visualization of 2D histogram. 
+
+```{r }
+library(hexbin)
+wh<-with(craigs,which(size<3000 & size>0 & price<20000))
+bin<-hexbin(x=craigs$size[wh], y=craigs$price[wh], xbins=100)
+plot(bin, main="Hexagonal Binning",xlab="Size",ylab="Price") 
+```
+
+Here we represent the density of points with a smooth density estimate for 2D using the function `smoothScatter` 
+
+```{r }
+smoothScatter(y=craigs$price,x=craigs$size,xlim=c(0,3000),nrpoints = 500)
+```
+
+We can also add a loess line on the smoothed density estimate (unlike hexbin, which doesn't look right...) and change the colors
+
+```{r }
+mycolramp<-colorRampPalette(c("white", head(blues9,3),"blue","purple","red","yellow"))
+smoothScatter(y=craigs$price,x=craigs$size,xlim=c(0,3000),nrpoints = 1200,ylim=c(0,20000),colramp=mycolramp)
+lines(loessCraigs,col="red",lwd=3)
+```
+
+# Trends Example
+Here we read in information regarding global land temperatures. We format the year and month as well (complicated code for splitting up strings that I will not explain here). 
+
+```{r }
+temp<-read.csv(file.path(dataDir,"GlobalLandTemperaturesByMajorCity.csv"),header=TRUE,stringsAsFactors=TRUE)
+head(temp)
+temp$Year<-as.numeric(sapply(strsplit(as.character(temp$dt),"-"),.subset2,1))
+temp$Month<-as.numeric(sapply(strsplit(as.character(temp$dt),"-"),.subset2,2))
+```
+
+Plot all of the temperatures by year
+
+```{r }
+par(mfrow=c(1,2))
+plot(temp$Year,temp$AverageTemperature,main="All data points, all months")
+lines(loess.smooth(x=temp$Year,y=temp$AverageTemperature,degree=2),col="red",lwd=2)
+smoothScatter(x=temp$Year,y=temp$AverageTemperature,main="All data points, all months, smoothed")
+```
+
+Now we plot all of the temperatures by year, but highlight some cities and months to show why this is not a useful plot.
+
+```{r }
+plot(temp$Year,temp$AverageTemperature,main="Cities highlighed")
+lines(loess.smooth(x=temp$Year,y=temp$AverageTemperature,degree=2),col="red",lwd=2)
+tempNY_01<-subset(temp,City=="New York" & Month==1)
+tempNY_08<-subset(temp,City=="New York" & Month==8)
+tempLA_01<-subset(temp,City=="Los Angeles" & Month==1)
+tempLA_08<-subset(temp,City=="Los Angeles" & Month==8)
+with(tempNY_01,points(x=Year,y=AverageTemperature,col="skyblue1"))
+with(tempNY_08,points(x=Year,y=AverageTemperature,col="blue"))
+with(tempLA_01,points(x=Year,y=AverageTemperature,col="pink"))
+with(tempLA_08,points(x=Year,y=AverageTemperature,col="red"))
+legend("bottomleft",c("NY, January","NY, August","LA, January","LA, August"),fill=c("skyblue1","blue","pink","red"),bg="white")
+```
+
+For different cities and different months, we can plot the data with a smooth curve over it using `scatter.smooth`. This is a single function that combines the plotting of the points and the smooth curve. It is handy, though you have less control over things like the color of the line, etc. (not to be confused with `smoothScatter` that we used above!)
+
+```{r }
+ylab="Average Temperature"
+xlab="Year"
+par(mfrow=c(2,2))
+tempNY_01<-subset(temp,City=="New York" & Month==1)
+tempNY_08<-subset(temp,City=="New York" & Month==8)
+tempLA_01<-subset(temp,City=="Los Angeles" & Month==1)
+tempLA_08<-subset(temp,City=="Los Angeles" & Month==8)
+scatter.smooth(tempNY_01$Year,tempNY_01$AverageTemperature,main="NY, January",lwd=2,ylab=ylab,xlab=xlab)
+scatter.smooth(tempNY_08$Year,tempNY_08$AverageTemperature,main="NY, August",lwd=2,ylab=ylab,xlab=xlab)
+scatter.smooth(tempLA_01$Year,tempLA_01$AverageTemperature,main="LA, January",lwd=2,ylab=ylab,xlab=xlab)
+scatter.smooth(tempLA_08$Year,tempLA_08$AverageTemperature,main="LA, August",lwd=2,ylab=ylab,xlab=xlab)
+```
+
+Here I make a function to plot confidence intervals around the plot of the loess curves
+If you notice, I'm going back and forth between different implementations of loess. `predict` on top of `loess` gives standard error estimates as well as the curve, but is rather akward to use; while `loess.smooth` (or `scatter.smooth`) is great for drawing the curve, but doesn't provide CI. However, `loess.smooth` and `loess` have different defaults, the most important being that `loess.smooth` by default sets `degree=1` (i.e. linear fit locally) while `loess` is `degree=2` (quadratic locally)}. To make it match the above, I will stick with `degree=1` and set the `span=2/3` to match the default of `scatter.smooth` that I did above.
+
+```{r }
+loessWithCI<-function(dataset,...){
+  xseq<-seq(min(dataset$Year),max(dataset$Year),length=100)
+  loessPred<-predict(loess(AverageTemperature~Year,data=dataset,span=2/3,degree=1),newdata=data.frame(Year=xseq),se=TRUE)
+  plot(AverageTemperature~Year,data=dataset,...)
+  lines(xseq,loessPred$fit,lwd=2)
+  lines(xseq,loessPred$fit - qt(0.975,loessPred$df)*loessPred$se,lwd=2, lty=2)
+  lines(xseq,loessPred$fit + qt(0.975,loessPred$df)*loessPred$se,lwd=2, lty=2)
+}
+par(mfrow=c(2,2))
+loessWithCI(tempNY_01,main="NY, January")
+loessWithCI(tempNY_08,main="NY, August")
+loessWithCI(tempLA_01,main="LA, January")
+loessWithCI(tempLA_08,main="LA, August")
+```
+
+Now we use smoothed estimates of the data to be able to plot many cities on the same plot. I use `subset` to subset the data to 8 cities. 
+
+```{r }
+temp08<-subset(temp,Month==8 & City %in% c("Peking","Los Angeles","Toronto","Riyadh","Kabul","Mexico","Rome","New York"))
+```
+
+The factors in this data (like city, or country) are based on the full dataset. This can be annoying when you subset the data, because even though there are no representations of these levels in this subset, they levels still stick around.
+
+```{r }
+# still have 100 cities listed as levels, even though only have 8
+nlevels(temp08$City)
+```
+
+So we can use the function `droplevels` to get rid of unused levels for all of the factors in the data
+
+```{r }
+temp08<-droplevels(temp08) #otherwise the unused cities are still part of factor.
+```
+
+First we will make a vector that gives a color to each city. We will give the names of the vector those of the cities.
+
+```{r }
+cityColors<-palette()[1:nlevels(temp08$City)]
+names(cityColors)<-levels(temp08$City)
+```
+
+Now we make a blank plot. We will draw `AverageTemperature` as a function of `Year` for our points, but not actually draw it by setting `type="n"`. Then, for each city, we will plot the loess curve on this blank plot.  We will use the function `by` (basically the same as `aggregate`) to go over a *data.frame* based on a factor. This is like `tapply`, only `tapply` works on subsetting a vector based on a factor and `by` or `aggregate` work on subsetting a data.frame by a factor. 
+
+```{r }
+plot(temp08$Year,temp08$AverageTemperature,type="n",main="August, several Cities",xlab="Year",ylab="Temperature")#blank plot
+by(temp08,temp08$City,function(x){
+  lines(loess.smooth(x=x$Year, y=x$AverageTemperature),col=cityColors[unique(x$City)])
+})
+legend("topleft",legend=levels(temp08$City),ncol=2,fill=cityColors)
+```
+
+Notice that the limits of my plot are slightly bigger than they need because the individual points take up more space than necessary and I used the individual points to set my blank plot. I could instead find explicitly what I need the limit to be for the yaxis using `by` again:
+
+```{r }
+loessByCity08<-by(temp08,temp08$City,function(x){
+  loess.smooth(x=x$Year, y=x$AverageTemperature)
+})
+xlim<-range(sapply(loessByCity08,function(x){range(x$x)}))
+ylim<-range(sapply(loessByCity08,function(x){range(x$y)}))
+```
+
+Then I repeat the above, only now in my blank plot, I set `xlim` and `ylim` using the above values:
+
+```{r }
+plot(temp08$Year,temp08$AverageTemperature,type="n",xlim=xlim,ylim=ylim,main="August, several Cities",xlab="Year",ylab="Temperature")#blank plot
+by(temp08,temp08$City,function(x){
+  lines(loess.smooth(x=x$Year, y=x$AverageTemperature),col=cityColors[unique(x$City)])
+})
+legend("topleft",names(loessByCity08),ncol=2,fill=cityColors)
+```
+
+Here it doesn't make much difference, but with some datasets it can.
+
+We are going to repeat the above, only now we are going to subtract off the temperature in a particular year, so we only plot the difference from that year.
+
+```{r }
+yearCenter<-1849
+loessByCity08_center1<-by(temp08,temp08$City,function(x){
+  tempCenter<-x$AverageTemperature[x$Year==yearCenter]
+  loess.smooth(x=x$Year, y=x$AverageTemperature-tempCenter)
+})
+xlim<-range(sapply(loessByCity08_center1,function(x){range(x$x)}))
+ylim<-range(sapply(loessByCity08_center1,function(x){range(x$y)}))
+plot(0,0,type="n",xlim=xlim,ylim=ylim,xlab="Year",ylab=paste("Difference from",yearCenter))#blank plot
+trash<-mapply(loessByCity08_center1,cityColors,FUN=function(x,col){lines(x,col=col,lwd=3)})
+legend("topleft",names(loessByCity08_center1),ncol=2,fill=cityColors)
+```
+
+That didn't work so well, so lets plot the individual data plots for each of the cities, and highlight the point of 1849 to see what went wrong.
+
+```{r }
+par(mfrow=c(2,4))
+test<-by(temp08,temp08$City,function(x){
+	whYear<-which(x$Year==yearCenter)
+  tempCenter<-x$AverageTemperature[whYear]
+  plot(x$Year,x$AverageTemperature-tempCenter,main=as.character(unique(x$City)))
+  lines(loess.smooth(x=x$Year, y=x$AverageTemperature-tempCenter),col="red")
+  points(x$Year[whYear],(x$AverageTemperature-tempCenter)[whYear],col="blue",pch=19,cex=2)
+})
+```
+
+Instead I want to center by the value of the loess curve at that year, shown in the following plot. 
+
+```{r }
+loessCenterValue<-by(temp08,temp08$City,function(x){
+  predict(loess(AverageTemperature~Year,data=x,span=2/3,degree=1), newdata=data.frame(Year=yearCenter))
+})
+par(mfrow=c(2,4))
+test<-by(temp08,temp08$City,function(x){
+	whYear<-which(x$Year==yearCenter)
+  plot(x$Year,x$AverageTemperature,main=as.character(unique(x$City)))
+  lines(loess.smooth(x=x$Year, y=x$AverageTemperature),col="red")
+  predValue<-predict(loess(AverageTemperature~Year,data=x,span = 2/3, degree = 1), newdata=data.frame(Year=yearCenter))
+  points(x$Year[whYear],predValue,col="green",pch=19,cex=2)
+
+})
+```
+
+Now we subtract those values off to recenter the curves to all cross at the same point in that year.
+
+```{r }
+ylim<-range(mapply(loessByCity08,loessCenterValue,FUN=function(x,val){range(x$y-val)}))
+plot(0,0,type="n",xlim=xlim,ylim=ylim,xlab="Year",ylab=paste("Difference from",yearCenter))#blank plot
+trash<-mapply(loessByCity08,cityColors,loessCenterValue,FUN=function(x,col,center){
+	x$y<-x$y-center
+	lines(x,col=col,lwd=3)})
+legend("topleft",names(loessByCity08_center1),ncol=2,fill=cityColors)
+```
+

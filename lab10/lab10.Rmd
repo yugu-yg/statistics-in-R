@@ -1,0 +1,272 @@
+---
+title: "Lab 10"
+author: "STAT 131"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Welcome to the lab 10! Today, we will use linear regression to predict the red wine quality using physicochemical tests scores such as citric acid, pH, etc.
+
+But first, a demonstration of using the predict() function.
+
+```{r}
+x1 = rnorm(100)
+x2 = rnorm(100)
+y= 2*x1 + x2 + rnorm(100)
+lm_out = lm(y~x1 + x2)
+summary(lm_out)
+```
+
+Calculate prediction for y when x1 is 1 and x2 is 0.5.
+
+```{r}
+lm_out$coefficients[1] + lm_out$coefficients[2]* 1 + lm_out$coefficients[3]* 0.5 
+```
+
+Another way to do this.
+
+```{r}
+predict(lm_out, newdata = data.frame(x1= 1, x2= 0.5))
+```
+
+Can do several at once.
+
+```{r}
+predict(lm_out, newdata = data.frame(x1= c(1, 2), x2= c(0.5, -1) ))
+```
+
+We can find intervals for confidence of average or prediction interval for an individual outcome.
+
+```{r}
+predict(lm_out, newdata = data.frame(x1= c(1, 2), x2= c(0.5, -1) ), interval = "confidence")
+```
+```{r}
+predict(lm_out, newdata = data.frame(x1= c(1, 2), x2= c(0.5, -1) ), interval = "prediction")
+```
+
+A few other notes on regression. 
+
+1) If you try to predict one variable and include a perfectly correlated variable in the prediction set, then that variable will be perfectly fit to the outcome to the exclusion of all others.
+
+```{r}
+perf_cor = y/4
+summary(lm( y ~ perf_cor + x1 + x2 ))
+```
+
+
+2) If there are more variables used for prediction than there are observations, lm will only keep the first n-1 variables.
+
+```{r}
+x3= rnorm(100)
+x4= rnorm(100)
+x5= rnorm(100)
+
+all_x = data.frame(x1,x2,x3,x4,x5, y)
+lm(y~ . ,data= all_x[1:4,])
+```
+
+
+
+
+**Wine data** 
+
+The wine dataset is related to red variants of the Portuguese "Vinho Verde" wine. There are 1599 samples available in the dataset. Due to privacy and logistic issues, only physicochemical (inputs) and sensory (the output) variables are available (e.g. there is no data about grape types, wine brand, wine selling price, etc.). 
+
+The explanatory variables are all continuous variables based on physicochemical tests:
+
+- **fixed acidity**
+- **volatile acidity**
+- **citric acid**
+- **residual sugar**
+- **chlorides**
+- **free sulfur dioxide**
+- **total sulfur dioxide**
+- **density**
+- **pH**
+- **sulphates**
+- **alcohol**
+
+The response variable is the **quality** score between 0 and 10 (based on sensory data).
+
+Read data. We randomly split the data into two parts-the `wine` dataset with 1199 samples and the `wine.test` dataset with 400 samples. Splitting the dataset is a common technique when we want to evaluate the model performance. There are training set, validation set, and test set. The validation set is used for model selection. That is, to estimate the performance of the different model in order to choose the best one. The test set is used for estimating the performance of our final model.
+
+```{r}
+set.seed("20170413")
+wine.dataset <- read.csv("winequality-red.csv", sep = ";")
+test.samples <- sample(1:nrow(wine.dataset), 400)
+wine <- wine.dataset[-test.samples, ]
+wine.test <- wine.dataset[test.samples, ]
+```
+
+To check the correlation between explanatory variables:
+
+```{r}
+cor(wine[, -1])
+```
+
+Great! The correlations are not as high as the diamond dataset we saw in the last lab, which means we do not need to worry too much about heteroscedasticity. We now fit the linear regression using all of the explanatory variables:
+
+```{r}
+wine.fit <- lm(quality ~. ,data = na.omit(wine))
+summary(wine.fit)
+```
+
+
+**Exercise 1 Confidence Interval** 
+
+
+(a) Calculate the confidence interval for all the coefficients from the regression done above. Which of these factors will positively influence the wine quality?
+
+```{r}
+# Insert your code here to calculate the confidence intervals for the regression coefficients.
+confint(wine.fit)
+```
+
+(b) Calculate the confidence intervals for the samples in `wine.test` using the model you just fit. Which confidence interval will you use? Confidence intervals for the average response or the prediction interval?
+
+```{r}
+# insert your code here and save your confidence intervals as `wine.confint`
+wine.confint <- predict(wine.fit, newdata=data.frame(wine.test),interval="prediction")
+head(wine.confint)
+```
+
+(c) What is the percentage that your interval in (b) covers the true **quality** score in `wine.test`? What if you use the other confidence interval? Which one is consistent with your confidence level?
+
+```{r}
+# insert your code here and save your percentage as `pct.covered`
+subset = wine.test[which(wine.test$quality <= wine.confint[,3] & wine.test$quality >= wine.confint[,2]),]
+pct.covered <- nrow(subset) / nrow(wine.test) 
+pct.covered
+# insert your code here and save your percentage calculated 
+# using the other confidence interval as `pct.covered.other`
+wine.confint.other <- predict(wine.fit, newdata=data.frame(wine.test),interval="confidence")
+subset2 = wine.test[which(wine.test$quality <= wine.confint.other[,3] 
+                          & wine.test$quality >= wine.confint.other[,2]),]
+pct.covered.other <- nrow(subset2) / nrow(wine.test) 
+pct.covered.other
+```
+
+
+**Exercise 2 Bootstrap CI** 
+
+Scale the columns of the dataset using scale() and then make 95% bootstrap confidence intervals for the coefficients for the predictors. Plot these confidence intervals using the plotCI() function in gplots. Code from professor for making bootstrap CI is included. You can use this or write your own code. Use the wine subset as used above.
+
+```{r}
+bootstrapLM <- function(y,x, repetitions, confidence.level=0.95){
+    # calculate the observed statistics
+  stat.obs <- coef(lm(y~., data=x))
+  # calculate the bootstrapped statistics
+  bootFun<-function(){
+          sampled <- sample(1:length(y), size=length(y),replace = TRUE)
+          coef(lm(y[sampled]~.,data=x[sampled,])) #small correction here to make it for a matrix x
+  }  
+  stat.boot<-replicate(repetitions,bootFun())
+  # nm <-deparse(substitute(x))
+  # row.names(stat.boot)[2]<-nm
+  level<-1-confidence.level
+  confidence.interval <- apply(stat.boot,1,quantile,probs=c(level/2,1-level/2))
+    return(list(confidence.interval = cbind("lower"=confidence.interval[1,],"estimate"=stat.obs,"upper"=confidence.interval[2,]), bootStats=stat.boot))
+}
+library(gplots)
+wineTemp <- wine
+wineTemp[,-12]<-scale(wineTemp[,-12])
+ftScale = lm(wine$quality ~ . , data = wineTemp)
+wineBoot<-with(wineTemp,bootstrapLM(y=wine$quality,x=wineTemp[,-12],repetitions=1000))
+wineBoot$conf
+with(wineBoot,plotCI(confidence.interval[-1,"estimate"],ui=confidence.interval[-1,"upper"],li=confidence.interval[-1,"lower"],xaxt="n",col = palette(),main="confidence intervals" ))
+axis(side=1,at=1:(nrow(wineBoot$conf)-1),rownames(wineBoot$conf)[-1])
+```
+
+# Regression dianosis
+
+## Red wine dataset
+
+Read data.
+
+```{r}
+wine<- read.csv("winequality-red.csv", sep = ";")
+wine$quality <- wine$quality + rnorm(length(wine$quality))
+```
+
+Fit the model.
+```{r}
+wine.fit <- lm(quality~volatile.acidity+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+sulphates+alcohol, data=wine)
+summary(wine.fit)
+```
+
+**Exercise 3**
+
+(a) Do regression diagnostics using the `plot` function.
+
+```{r}
+# insert your code here to do regression diagnostics.
+par(mfrow = c(2, 2))
+plot(wine.fit)
+```
+
+(b) Answer the following TRUE/FALSE questions based on the diagnostics plot. Uncomment your answer.
+
+```{r}
+### I. The plot indicates heteroscedasticity.
+# TRUE
+FALSE
+### II. There are non-linearity between the explanatory variable and response variable.
+# TRUE
+FALSE
+### III. The normal assumption holds for this model.
+TRUE
+# FALSE
+```
+
+(c) Identify at least two outliers from the data. 
+
+```{r}
+par(mfrow=c(1,2))
+plot(wine.fit,which=c(4:5))
+```
+
+> I think the sample 1320 and 1080 are outliers.
+
+
+## Diamond dataset
+
+Read the data.
+
+```{r}
+diamonds <- read.csv("diamonds.csv")
+diamonds <- diamonds[sample(1:nrow(diamonds), 1000), ]
+head(diamonds)
+```
+
+Fit a linear regression.
+
+```{r}
+diamond.fit <- lm(price ~ carat + cut + color + clarity + depth + table, data = diamonds)
+summary(diamond.fit)
+```
+
+**Exercise 4**
+
+(a) Do regression diagnostics using the `plot` function.
+
+```{r}
+# insert your code here to do regression diagnostics.
+par(mfrow = c(2, 2))
+plot(diamond.fit)
+```
+
+(b) Answer the following TRUE/FALSE questions based on the diagnostics plot. Uncomment your answer.
+
+```{r}
+### I. The plot indicates heteroscedasticity.
+TRUE
+# FALSE
+### II. There are non-linearity between the explantory variable and response variable.
+TRUE
+# FALSE
+### III. The normal assumtion holds for this model.
+# TRUE
+FALSE
+```

@@ -1,0 +1,640 @@
+# Basic Exploratory analysis
+
+This is the directory I have my data saved in.
+
+```{r }
+dataDir<-"../finalDataSets"
+```
+
+To change it to your working directory uncomment the following code ("." just means current directory but you can also change it to something else):
+
+```{r }
+# dataDir<-"."
+```
+
+I will create a variable consisting of a string (i.e. character-valued) that is the location of that file. I use a function ` file.path ` to make the path to my file, though I could just type it
+
+```{r }
+nameOfFile<-file.path(dataDir,"SFSalaries2014.csv")
+```
+
+Now we read in the data with the function ` read.csv()`. We give it as first argument a string which gives the path to the data file (in this case the variable I defined above). Note that ` read.csv()` is for reading comma deliminated files.
+
+```{r }
+salaries2014<-read.csv(nameOfFile,na.strings="Not Provided")
+```
+
+The result is in an object called ` salaries ` and is a ` data.frame ` object.
+We can look at some basic information regarding this data.frame:
+
+```{r }
+# dimension:
+dim(salaries2014)
+# column names:
+names(salaries2014)
+```
+
+We can just print a few rows and columns by indexing the ` data.frame `. Notice I can use either numeric indices ` 1:10 ` (often useful for rows) or the names (useful for columns which usually have names)
+
+```{r }
+salaries2014[1:10,c("JobTitle","Benefits", "TotalPay","Status")]
+```
+
+ ` summary `  creates a 5-number summary of the departure delay, giving the min, max, and the 25,50,75 percentiles of data:
+
+```{r }
+summary(salaries2014$TotalPay)
+```
+
+We will subset to those rows that do not have NA for  ` DepDelay ` . Note use of  ` subset ` , a useful function for getting a subset of rows, where the first argument is a data.frame and a second argument is a logical argument. Notice that *within* the command ` subset ` I do not need the ` $ `, but can directly use the name of the column ` DepDelay `  (that is not true of most functions, however).
+
+```{r }
+zeroPay<-subset(salaries2014,TotalPay ==0)
+```
+
+I can see how many have negative pay with ` nrow `, which gives the number of rows of a dataset
+
+```{r }
+nrow(zeroPay)
+```
+
+ ` head `  shows the top 5 rows of a data.frame.
+
+```{r }
+head(zeroPay)
+```
+
+ ` summary `  applied to a data frame does summary of each column.
+
+```{r }
+summary(zeroPay)
+```
+
+Now I want a quick look at what the data would look like if I only kept those with non-zero pay (i.e. ` TotalPay>0 `). I could make a separate data frame that is non-zero entries, like I did with the zero entires. But I can also just apply the function ` summary ` to the output of ` subset ` directly, without having to save the object as a name. This can be faster to code for quick calculations and keep my workspace cleaner (and smaller memory if they are large objects). It is a tradeoff since it will make the code less readable.
+
+```{r }
+summary(subset(salaries2014,TotalPay>0))
+```
+
+Again a quick look at PT versus FT workers
+
+```{r }
+summary(subset(salaries2014,Status=="FT"))
+summary(subset(salaries2014,Status=="PT"))
+```
+
+Again a quick look at PT versus FT workers
+
+```{r }
+salaries2014_FT <- subset(salaries2014,Status=="FT")
+```
+
+## Histograms
+
+The ` hist ` function creates histogram.
+Arguments ` main ` and ` xlab ` are shared across plotting commands.
+` main ` sets the title of plot, and
+` xlab ` sets the label for the xaxis. The command ` abline ` adds straight
+lines (usually vertical or horizonal) to a plot. I use the argument ` v ` ,
+meaning I want a vertical line (if I used ` h ` I would get a horizontal
+line), and I draw one at the mean and median of the data.
+The last command ` legend ` creates a legend explaining my lines.
+
+```{r }
+hist(salaries2014_FT$TotalPay,main="Total Pay", xlab="Pay (in dollars)")
+abline(v = mean(salaries2014_FT$TotalPay),lty="dashed")
+abline(v = median(salaries2014_FT$TotalPay))
+legend("topright", legend=c("Median","Mean"),lty=c("solid","dashed"))
+```
+
+Here we show the the effect of changing the argument  ` breaks `  to histogram.
+
+```{r }
+par(mfrow=c(2,2))
+hist(salaries2014_FT$TotalPay,main="Total Pay, default breaks", xlab="Pay (in dollars)")
+hist(salaries2014_FT$TotalPay,main="Total Pay, breaks=100", xlab="Pay (in dollars)", breaks=100)
+hist(salaries2014_FT$TotalPay,main="Total Pay, breaks=1000", xlab="Pay (in dollars)",breaks=1000)
+```
+
+We can truncate the x axis using the command ` xlim ` to "zoom-in" on that region of the histogram.
+
+```{r }
+hist(salaries2014_FT$TotalPay,main="Total Pay, Zoomed-in", xlab="Pay (in dollars)", xlim=c(0,1e5), breaks=1000)
+```
+
+Note that the command  ` par(mfrow=c(2,2)) `  sets up a 2x2 grid of plots. Similarly,  ` par(mfrow=c(1,2)) `  sets up a 1x2 grid.
+If we are working in a Rmarkdown document within RStudio, each plot is a new plotting windown, and so by default a single plot. But if you are working interactively in a console, you sometimes need to manually revert back to a single plot. To get back to a single plot, we would type the command    ` par(mfrow=c(1,1)) `
+
+What about a smaller data frame with only full-time firefighters? (again truncating the axis)
+
+We first subset the data, to those with ` JobTitle=="Firefighter" & Status=="FT" `
+
+```{r }
+salaries2014_FT_FF <- subset(salaries2014_FT, JobTitle=="Firefighter" & Status=="FT")
+dim(salaries2014_FT_FF )
+```
+
+Now we can plot the histograms of this subsetted data:
+
+```{r }
+par(mfrow=c(2,2))
+hist(salaries2014_FT_FF$TotalPay,main="Firefighters, default breaks", xlab="Pay (in dollars)")
+hist(salaries2014_FT_FF$TotalPay,main="Firefighters, breaks=30", xlab="Pay (in dollars)", breaks=30)
+hist(salaries2014_FT_FF$TotalPay,main="Firefighters, breaks=100", xlab="Pay (in dollars)", breaks=100)
+hist(salaries2014_FT_FF$TotalPay,main="Firefighters, breaks=1000", xlab="Pay (in dollars)",breaks=1000)
+```
+
+## Boxplots
+
+The command   ` boxplot `   gives basic boxplots. Notice I can continue to use arguments like   ` main `   and   ` ylab `   to make the plot more informative.
+
+```{r }
+par(mfrow=c(1,1))
+boxplot(salaries2014_FT$TotalPay,main="Total Pay, breaks=1000", ylab="Pay (in dollars)")
+```
+
+I am going to create a dataset with only the top 10 job types. First I am going to find the totals of each job type of full-time employees with the function ` table `.
+
+```{r }
+tabJobType<-table(subset(salaries2014_FT, Status=="FT")$JobTitle)
+```
+
+Now I'm going to sort them by their size
+
+```{r }
+tabJobType<-sort(tabJobType,decreasing=TRUE)
+```
+
+Now I'm going to get the names of the top 10 largest job titles
+
+```{r }
+topJobs<-head(names(tabJobType),10)
+```
+
+Finally, I will subset to only those entries with these job titles, using the function ` %in% ` for comparisons
+
+```{r }
+salaries2014_top<-subset(salaries2014_FT, JobTitle %in% topJobs & Status=="FT")
+```
+
+I will apply the function ` droplevels ` to the result of subsetting. Otherwise the job titles I removed will still hang around as empty categories.
+
+```{r }
+salaries2014_top<-droplevels(salaries2014_top)
+dim(salaries2014_top)
+```
+
+Now I use a special formulation for telling R to divide into separate boxplots for different groups; specifically divide the numeric value 'TotalPay' into different groups based on job title (`JobTitle`) and make a boxplot separately for each group. The  `y ~ fac `  notation means that  ` y `  is the numeric values and  ` fac `  is the factor defining groups you want to divide into.
+
+```{r }
+par(mar=c(10,4.1,4.1,.1))
+boxplot(salaries2014_top$TotalPay~salaries2014_top$JobTitle,
+	main="Total Pay, by job title, 10 most frequent job titles" , xlab="",
+	ylab="Pay (in dollars)",las=3)
+```
+
+Here I use the argument  ` outline=FALSE `  to indicate not to plot the individual "outliers" beyond the whiskers. I've also used a different way to give the data. I give my data.frame ` salaries2014_top ` to the argument ` data `, and then I can just use the column names in my ` y ~ fac ` argument. This can simplify the code, and make it easier to change between datasets with the same column names.
+
+```{r }
+boxplot(TotalPay~JobTitle, data=salaries2014_top,
+	main="Total Pay, by job title, 10 most frequent job titles" , xlab="",
+	ylab="Pay (in dollars)",las=3, outline=FALSE)
+```
+
+## Descriptive Vocabulary
+Here we create some data to demonstrate different features of distributions and plot their histograms. We do this by creating simulated data with R's simulation tools.  (` rgamma `, ` rnorm `, ` rcauchy `). A note about the simulated data. The function ` rXXX ` always stands for getting simulated data from the XXX distribution (so gamma, normal, and cauchy distribution here). The first argument is the number of simulated values (1000); the remaining arguments are parameters of the distribution which vary depending on the distribution.
+
+```{r }
+set.seed(1)
+par(mfrow=c(2,2))
+hist(rgamma(1000,shape=2),main="Right Skew")
+hist(rnorm(1000),main="Symmetric")
+breaks=seq(-20,20,1)
+hist(rnorm(1000),main="Light tails",xlim=c(-20,20),breaks=breaks,freq=TRUE)
+# This distribution creates such extreme values that we will subset to
+# only show the range of [-20,20]
+x<-rcauchy(1000)
+hist(x[abs(x)<=20],main="Heavy tails",xlim=c(-20,20),breaks=breaks,freq=TRUE)
+```
+
+## Flight Data and Transformations
+
+We briefly bring in some different data regarding flights.
+
+```{r }
+flightSF<-read.table(file.path(dataDir,"SFO.txt"),sep="\t",header=TRUE)
+```
+
+We can look at some basic information regarding this data.frame:
+
+```{r }
+# dimension:
+dim(flightSF)
+# column names:
+names(flightSF)
+```
+
+ ` summary `  creates a 5-number summary of the departure delay, giving the min, max, and the 25,50,75 percentiles of data:
+
+```{r }
+summary(flightSF$DepDelay)
+```
+
+We will subset to those rows that do not have NA for  ` DepDelay ` . Note use of  ` subset ` , a useful function for getting a subset of rows, where the first argument is a data.frame and a second argument is a logical argument. Notice that *within* the command ` subset ` I do not need the ` $ `, but can directly use the name of the column ` DepDelay `  (that is not true of most functions, however).
+
+```{r }
+naDepDf<-subset(flightSF,is.na(DepDelay))
+```
+
+ ` head `  shows the top 5 rows of a data.frame. Here, I have also selected only 5 columns. Note how I can select them by name of the column.
+
+```{r }
+head(naDepDf[,c("FlightDate","Carrier","FlightNum","DepDelay","Cancelled")])
+```
+
+ ` summary `  applied to a data frame does summary of each column.
+
+```{r }
+summary(naDepDf[,c("FlightDate","Carrier","FlightNum","DepDelay","Cancelled")])
+```
+
+Now we do a histogram of the flight data. Notice how I can actually collapse the drawing of the mean and median with ` abline ` into a single command. I do this by giving a vector of values for which I want to draw the line, and (optionally) a vector of line types (` lty ` argument) for the values.
+
+```{r }
+par(mfrow=c(1,1))
+hist(flightSF$DepDelay,main="Departure Delay", xlab="Time (in minutes)")
+abline(v=c(mean(flightSF$DepDelay,na.rm=TRUE),median(flightSF$DepDelay,na.rm=TRUE)), lty=c("dashed","solid"))
+```
+
+In calculating the mean and median, however, I had to use the argument ` na.rm=TRUE `. ` na.rm ` stands for "remove NAs`. If I didn't remove them in my calculationg of the mean or median, I would just get NA values back (R refuses to do calculation on NA values unless you give explicit instructions for how to deal with NA values -- this forces you to be aware of the NA values and think about them.)
+
+However, this is not true of plots -- plotting commands generally ignore NA values, so our histogram doesn't show them.
+Here we create a new variable ` DepDelayWithCancel ` that differs from ` DepDelay ` because we entered in 'fake' values for the cancelled flights.
+(This was done in class so that the NA values show up on our histogram.)
+First we will create the new variable as a copy of the existing variable ` DepDelay `. Then we will define a new value for those that are NA. Notice how we can use  ` is.na `  to identify the NAs, and then assign only those the value 1200
+
+```{r }
+flightSF$DepDelayWithCancel<-flightSF$DepDelay
+flightSF$DepDelayWithCancel[is.na(flightSF$DepDelay)]<-1200
+hist(flightSF$DepDelayWithCancel,xlab="Time (in minutes)", main="Departure delay, with cancellations=1200")
+```
+
+Now a boxplot of departure delay by carrier
+
+```{r }
+boxplot(flightSF$DepDelay~flightSF$Carrier,
+	main="Departure Delay, by airline carrier",
+	ylab="Time (in minutes)")
+```
+
+Here I use the argument  ` outline=FALSE `  to indicate not to plot the individual "outliers" beyond the whiskers.
+
+```{r }
+boxplot(flightSF$DepDelay~flightSF$Carrier,
+	main="Departure Delay, by airline carrier",
+	ylab="Time (in minutes)",outline=FALSE)
+```
+
+## Transformations
+
+We want to plot the curve corresponding to the log and square-root functions to demonstrate their behavior as transformations.  The  ` curve `  function draws a function. The first argument is the function, and the  ` from `  and  ` to `  arguments give the range of values. Here I draw the  ` log `  function then the next command is the  ` sqrt `  funciton. For the  ` sqrt `  I use the argument  ` add=TRUE `  to have the curve for the square-root plot on an existing plot. I also use the argument  ` col `  to choose what color each curve should be, where it can take character values like "red" or "black" (the full list of possible character colors is given by typing the function ` colors() ` into the R console).
+
+```{r }
+ylim<-c(-3,3)
+curve(log,from=0,to=10,ylim=ylim,
+    ylab="Transformed",xlab="Original")
+curve(sqrt,from=0,to=10,add=TRUE,col="red")
+legend("bottomright",legend=c("log","sqrt"),fill=c("black","red"))
+title(main="Graph of log and sqrt functions")
+```
+
+The function  ` legend `  adds a legend to your existing figure. The first argument is the location of the legend ( ` bottomright ` ). The argument  ` legend `  is the vector of character strings that make up the text of the legend. The remaining arguments tell what should be in front of the text and should be the same length as the  ` legend `  argument (if they are a different length, then the values will be "recycled", i.e. start back at the beginning until get to the right length). Here we choose to have color-filled squares by using the argument  ` fill `  to give the colors.
+
+Notice I also used the function ` title ` to add descriptive text (in this case the main title) to the plot after the plot was already created. It takes the standard arguments that ` plot ` does (` main `, ` xlab `, ` ylab `), but can be used after the plot has already been created. It's more of a preference whether you separate it into another command, or put it in the original plotting command. Here I've actually put some arguments in the first plotting command (` xlab ` and ` ylab `) and some separately.
+Here I make some simulated data from the "gamma" distribution in order to create skewed data and show the effect of the log transformation. In the case of the gamma distribution, the ` scale `  and  ` shape `  are parameters of the distribution.
+
+```{r }
+y<-rgamma(10000,scale=1,shape=0.1)
+```
+
+Note I first plot the histogram of the original y and then the histogram of the the log-transformed y. I use the  ` par(mfrow=c(1,2)) `  to draw them side-by-side as a 1x2 grid
+
+```{r }
+par(mfrow=c(1,2))
+hist(y,main="Original data",xlab="original scale",breaks=50)
+hist(log(y),main="Log of data",xlab="log-scale",breaks=50)
+```
+
+Now I will do a transformation of our flight delay data. Since I can't take the log (because I have negative values as well as 0's) I will add a little bit to each value before I take the log or square-root. This may not be the most brillant thing to do, frankly.
+I decided to choose how much to add by finding the minimum value, taking the absolute value, and adding 1. Notice how I use  ` na.rm=TRUE `  when I take the minimum. Otherwise the minimum where there are NA's is NA.  ` na.rm=TRUE `  means to remove the NAs before taking the minimum.
+
+```{r }
+addValue<-abs(min(flightSF$DepDelay,na.rm=TRUE))+1
+```
+
+Having done that, I will now add that amount the departure delay, and plot the histogram of this value as well as the log and square-root transformations of the data.
+
+```{r }
+par(mfrow=c(3,1))
+boxplot(flightSF$DepDelay+addValue~flightSF$Carrier,main="Departure Delay, original", ylab="Time")
+boxplot(log(flightSF$DepDelay+addValue)~flightSF$Carrier,main="Departure Delay, log transformed", ylab=paste("log(Time+",addValue,")"))
+boxplot(sqrt(flightSF$DepDelay+addValue)~flightSF$Carrier,main="Departure Delay, sqrt-transformed", ylab=paste("sqrt(Time+",addValue,")"))
+```
+
+Notice in creating the  ` ylab `  value, I use the  ` paste `  function. The paste function concatinates two strings. It's particularly helpful when you want to put a variable into your label/title/etc. Here, I paste the *string*  ` sqrt(Time+ `  with the value of my variable  ` addValue ` . )
+The following is the code for calculating the probabilities for a SRS from our census of full-time pay information. We use ` sum ` of a logical statement to count how many are true, and then divide by the total number of observations.
+
+```{r }
+sum(salaries2014_FT$TotalPay==72000)/nrow(salaries2014_FT)
+sum(salaries2014_FT$TotalPay<=72000)/nrow(salaries2014_FT)
+sum(salaries2014_FT$TotalPay>200000)/nrow(salaries2014_FT)
+```
+
+The following is the code for calculating the conditional probabilities of a random employee making less than $64K given that the employee makes less than $72K
+
+```{r }
+sum(salaries2014_FT$TotalPay<=64000)/sum(salaries2014_FT$TotalPay<72000)
+```
+
+Contrast this with calculating the probability of a random employer making less than $64K
+
+```{r }
+sum(salaries2014_FT$TotalPay<=64000)/nrow(salaries2014_FT)
+```
+
+## Conditioning
+
+Here we show the concept of a conditional distribution by subsetting our previous data to only those employees and showing a histogram of the data.
+
+```{r }
+condPop <- subset(salaries2014_FT, TotalPay < 72000)
+par(mfrow=c(1,1))
+hist(condPop$TotalPay, main="Conditional Distribution, less than $72K", xlab="Pay (in dollars)")
+```
+
+# Histograms of samples of data
+
+Now I want to create a simple random sample from my data (SRS). I use the function  ` sample `  to draw a sample from my full-time employees.  The argument ` x `  gives the vector of values I want to sample from (my employees' total pay) and the argument ` size `  is the size of the sample I would like to draw.
+A very important argument to  ` sample `  is the argument  ` replace ` . If it equals  ` TRUE `  then we sample without replacement (what we typically mean by a SRS).
+
+```{r }
+salariesSRS<-sample(x=salaries2014_FT$TotalPay, size= 100, replace=FALSE)
+```
+
+To get a *permutation* (a random reordering) of my data, I could keep  ` replace=FALSE ` (or leave out the `replace` argument) and set the size equal to the total sample size (or just leave out the `size` argument)
+
+```{r }
+sample(1:5)
+```
+
+
+
+Here I read in data that was a SRS from the entire year, and one that was a stratified sample of a SRS per month. I then compare the histograms to compare different types of samples.
+
+```{r }
+flightSFOSRS<-read.table(file.path(dataDir,"SFO_SRS.txt"),
+        sep="\t",header=TRUE, stringsAsFactors = FALSE)
+flightSFOStratified<-read.table(file.path(dataDir,"SFO_Stratified.txt"),
+        sep="\t",header=TRUE, stringsAsFactors = FALSE)
+par(mfrow=c(2,2))
+xlim<-c(-20,400)
+hist(flightSF$DepDelay,breaks=100,xlim=xlim,freq=FALSE)
+hist(flightSFOSRS$DepDelay,breaks=100,xlim=xlim,freq=FALSE)
+hist(flightSFOStratified$DepDelay,breaks=100,xlim=xlim,freq=FALSE)
+```
+
+Here I am going to create a SRS and take the mean of the SRS of size 1,000 over and over again (10,000 times) in order to demonstrate the Central Limit Theorem.
+I use the function  ` replicate `  to do the exact same (usually random) something over and over again. I define the random thing I want to do to the argument  ` expr ` . In this case it is to sample with replacement and take the mean.  ` n=10000 `  means to do it 10,000 times. The 10,000 means are returned and saved as a vector.
+
+```{r }
+sampleSize<-1000
+sampleMean<-replicate(n=10000,expr=mean(sample(salaries2014_FT$TotalPay,size=sampleSize,replace=TRUE)))
+hist(sampleMean,xlab="Mean Pay",main=paste("Mean of SRS of size",sampleSize))
+```
+
+We now will plot the histogram of the 10,000 simulations of means of our SRS from the salary data and overlay the density. Note we need to draw the histogram on the "density" scale by setting  ` freq=FALSE `  (i.e. NOT frequency/counts).
+We then define a curve to overlay the histogram using the  ` dnorm `  function.  ` dXXX `  functions calculate the density of a value  ` x `  and take the form  ` dXXX(x) `  and return $p(x)$. They can take a vector of values  ` x `  or a single value. They also have the ability to give parameters. For the normal, this is  ` mean `  and  ` sd `  (so standard deviation, not variance).
+We do this by creating a function  ` p `  and then do  ` curve(p) ` . We do  ` add=TRUE `  and  ` col="red" `  and  ` lwd=3 `  to get it to overlay a red curve that is 3 times the usual thickness.
+
+```{r }
+hist(sampleMean,xlab="Mean Pay",main=paste("Mean of SRS of size",sampleSize),freq=FALSE)
+m<-mean(salaries2014_FT$TotalPay) #true mean
+s<-sqrt(var(salaries2014_FT$TotalPay)/sampleSize) #true var/n
+p<-function(x){dnorm(x, mean=m,sd=s)}
+curve(p,add=TRUE,col="red",lwd=3)
+```
+
+Note in order to have the density of the normal centered and scaled at the right values, we need to calculate the mean and standard deviation predicted by the CLT. This is the mean of the original population (i.e. the one we sampled from), given by  ` mean(salaries2014_FT$TotalPay) ` . And the standard deviation is the square root of the variance of the original population, divided by the size of our SRS (n=1000).
+Here we can see how much smaller the variability of the mean is as $n$ increases. I repeat the above code, but for different sizes of $n$. To make this easier, I write a small little function
+
+```{r }
+mysample<-function(n){mean(sample(salaries2014_FT$TotalPay,size=n,replace=TRUE))}
+sampleSizeVary<-100
+sampleMean100<-replicate(n=10000,expr=mysample(sampleSizeVary))
+sampleSizeVary<-1000
+sampleMean1000<-replicate(n=10000,expr=mysample(sampleSizeVary))
+sampleSizeVary<-1900
+sampleMean1900<-replicate(n=10000,expr=mysample(sampleSizeVary))
+sampleSizeVary<-10000
+sampleMean10000<-replicate(n=10000,expr=mysample(sampleSizeVary))
+par(mfrow=c(2,2))
+xlim<-range(c(sampleMean100,sampleMean1000,sampleMean1900,sampleMean10000))
+xlab<-"Mean Pay"
+hist(sampleMean100,xlab=xlab,
+    main="Mean of SRS of size 100",xlim=xlim)
+hist(sampleMean1000,xlab=xlab,main="Mean of SRS of size 1000",xlim=xlim)
+hist(sampleMean1900,xlab=xlab,main="Mean of SRS of size 1900",xlim=xlim)
+hist(sampleMean10000,xlab=xlab,main="Mean of SRS of size 10,000",xlim=xlim)
+```
+
+We demonstrate the pdf of a uniform distribution ( ` dunif ` ); this corresponds to a pdf with uniform values between 0,1 (for illustration of properties of the density.)
+
+```{r }
+curve(dunif,xlim=c(-1,2),ylab="p(x)",xlab="x")
+```
+
+Now we demonstrate the pdf of a uniform distribution between (1/4, 1/2) and how it effects the density values. Instead of using the function  ` curve `  we show another way to plot curves that is commonly used. We create a sequence of ordered values between -1 and 2, of length 100, using the  ` seq `  command.
+
+```{r }
+xvalues<-seq(-1,2,length=100)
+```
+
+We now evaluate  ` dunif `  at each of those values; here we set the uniform parameters  ` min `  and  ` max `  to indicate that the uniform is between 1/4 and 1/2.
+
+```{r }
+yvalues<-dunif(xvalues,min=1/4,max=1/2)
+```
+
+We now do a scatter plot of the  ` xvalues `  and the  ` yvalues ` . But instead of drawing points, we will tell R to connect those points with a line by setting  ` type="l" `  ( ` l `  for lines).
+
+```{r }
+plot(xvalues,yvalues,type="l",xlim=c(-1,2),ylab="p(x)",xlab="x")
+```
+
+We now draw the density histogram in dollars versus thousands of dollars to demonstrate the effect of scaling the departure delay on the value of the density.
+
+```{r }
+par(mfrow=c(1,2))
+hist(sampleMean/10000,main="Pay, 10K dollars", xlab="Pay (in dollars)",freq=FALSE)
+ylim<-c(0,par("usr")[4]) #par("usr")[4] just tells me the largest value on the y-axis from last plot.
+hist(sampleMean/1000,main="Pay, 1K dollars", xlab="Pay (in thousands of dollars)",freq=FALSE,ylim=ylim)
+```
+
+We now draw the density histogram with different numbers of breaks to illustrate the effect on the value of the density.
+
+```{r }
+par(mfrow=c(1,2))
+ylim<-c(0,1)
+hist(salaries2014_FT$TotalPay/10000,main="Pay, 10,000 breaks", xlab="Pay (in $10K)",breaks=10000,freq=FALSE,ylim=ylim)
+hist(salaries2014_FT$TotalPay/10000,main="Pay, 10 breaks", xlab="Pay (in $10K)",breaks=10,freq=FALSE,ylim=ylim)
+```
+
+Here are examples of different pdfs and different parameters. Notice the use of the dXXX formulation.
+
+```{r }
+par(mfrow=c(2,2))
+f<-function(x){dgamma(x,shape=5,scale=1)}
+curve(f,from=0,to=20,ylab="p(x)",main="Gamma(5,1) distribution")
+f<-function(x){dgamma(x,shape=1,scale=5)}
+curve(f,from=0,to=20,ylab="p(x)",main="Gamma(1,5) distribution")
+f<-function(x){dbeta(x,.5,.5)}
+curve(f,from=0,to=1,ylab="p(x)",main="Beta(.5,.5) distribution")
+f<-function(x){dbeta(x,2,5)}
+curve(f,from=0,to=1,ylab="p(x)",main="Beta(2,5) distribution")
+```
+
+These are examples of functions that are not pdfs.
+
+```{r }
+par(mfrow=c(1,2))
+f<-function(x){x^3}
+curve(f,from=-10,to=10,ylab="p(x)",main=expression(x^3))
+f<-function(x){x^2}
+curve(f,from=-10,to=10,ylab="p(x)",main=expression(x^2))
+```
+
+This is an example of a pdf that goes to infinity but is a density (called the exponential, a special case of the gamma)
+
+```{r }
+curve(dexp,from=0,to=10,ylab="p(x)",main="Exponential distribution")
+```
+
+A histogram of a single, simple random sample of salaries.
+
+```{r }
+binWidth<-20000
+bins<-seq(0,max(salariesSRS)+binWidth,by=binWidth)
+xlim<-range(breaks)
+histBin<-hist(salariesSRS,xlab="Pay (in dollars)",breaks=bins,freq=TRUE,xlim=xlim)
+ylim<-range(histBin$density)
+```
+
+We repeat the density histogram with different number of breaks, only now we draw the histogram for the simulation of 10,000 means of a SRS, where we know that the distribution approaches a normal, by the CLT. Then we can see the effect of too small or too big of bins.
+Here I'm doing the total pay in units of $10K to make have "nicer" values on the y-axis
+
+```{r }
+m<-mean(salaries2014_FT$TotalPay/10000)
+s<-sqrt(var(salaries2014_FT$TotalPay/10000)/sampleSize)
+dn<-function(x){dnorm(x, mean=m,sd=s)}
+par(mfrow=c(2,2))
+xlab<-"Mean Pay"
+hist(sampleMean/10000,xlab=xlab,main=expression(paste(bar(X),", 10 breaks")),breaks=10,freq=FALSE)
+curve(dn,add=TRUE,col="red",lwd=3)
+hist(sampleMean/10000,xlab=xlab,main=expression(paste(bar(X),", 30 breaks")),breaks=30,freq=FALSE)
+curve(dn,add=TRUE,col="red",lwd=3)
+hist(sampleMean/10000,xlab=xlab,main=expression(paste(bar(X),", 100 breaks")),freq=FALSE,breaks=100)
+curve(dn,add=TRUE,col="red",lwd=3)
+hist(sampleMean/10000,xlab=xlab,main=expression(paste(bar(X),", 1000 breaks")),freq=FALSE,breaks=1000)
+curve(dn,add=TRUE,col="red",lwd=3)
+```
+
+The next code is a plot showing the result of creating a density curve using a rectangle kernel. Note we call the function  ` density `  on our SRS of flight data to get our kernel density estimate of the pdf. I set the kernel to be  ` rectangular `  to give the rectangular moving windows.  Here I set the bandwidth ( ` bw ` ) to *exactly* match what we did in class, but normally you would use the default .
+You will notice that is still not exactly what we got in class -- it looks smoother. That is because it is evaluating only on a small number of points, and interpolating between. I will call ` density ` again, only setting an unusual parameter ` n `, again to match what we did in class; as you can see, it's not as good of an idea. To overlay this density on the other, I will use ` lines `.
+
+```{r }
+par(mfrow=c(1,2))
+d<-density(salariesSRS,bw=binWidth/sqrt(12),kernel="rectangular")
+plot(d,col="blue", main="Rectangular Kernel Density")
+plot(d,col="blue", main="Rectangular Kernel Density, Exact and Interpolating",xlim=c(50000,100000), sub="Zoomed to [$50K,$100K]")
+dExact<-density(salariesSRS,bw=binWidth/sqrt(12),n=100000,kernel="rectangular")
+lines(dExact, col="red")
+legend("topright",fill=c("black","red"),legend=c("Interpolating","All x values"))
+```
+
+Here I have plotted the density curve for the gaussian and the rectangular. First I plot the histogram as a reminder. Then in the next plot, I plot the density using a Guassian/normal kernel. To overlay the rectangular density, I call  ` lines `  instead of  ` plot `  --  ` lines `  automatically adds to the existing plot rather than making a new plot. The function ` stepfun ` will plot our step function from the histogram -- this is not an important thing to be able to do, mainly for illustrations.
+
+```{r }
+par(mfrow=c(1,2))
+plot(histBin,freq=FALSE)
+p<-stepfun(histBin$breaks,c(0,histBin$density,0),right=TRUE)
+lines(p,do.points=FALSE,verticals=FALSE,col="blue",lwd=2)
+dG<-density(salariesSRS,kernel="gaussian",bw=binWidth/sqrt(12))
+dR<-density(salariesSRS,kernel="rectangular",bw=binWidth/sqrt(12))
+plot(dR,
+	main="Density estimate, both kernels",col="red")
+lines(dG,col="black")
+p<-stepfun(histBin$breaks,c(0,histBin$density,0),right=TRUE)
+lines(p,do.points=FALSE,verticals=FALSE,col="blue")
+legend("topright",c("Normal","Rectangle","Histogram"),fill=c("black","red","blue"))
+```
+
+Now I use a for-loop to repeat the same plot, only now choosing a different bandwidth for each plot. I set up a 2x2 grid. Then I run a for-loop over the values 1, 0.5, 2, and 10, and for each iteration of the for-loop, I multiply the bandwidth parameter by that value by setting the  ` adjust `  parameter in the  ` density `  function.
+
+```{r }
+par(mfrow=c(2,2))
+for(adjust in c(1,0.5,2,10)){
+  plot(density(salariesSRS,kernel="gaussian",adjust=adjust),main="Density estimate, different bandwidths",
+  sub=paste("Default bandwith multiplied by",adjust),)
+lines(density(salariesSRS,kernel="rectangular",adjust=adjust),col="red")
+legend("topright",c("Normal","Rectangle"),fill=c("black","red"))
+}
+```
+
+Notice the use of the  ` sub `  argument to the first plotting call. This sets a subtitle underneath the x-axis.
+
+Now I plot the density for multiple groups on the same plot. This code gets more complicated. Don't worry if you don't follow this too closely. I will make this into a function and make it available for the class.
+
+```{r }
+perGroupDensity<-tapply(X=salaries2014_top$TotalPay,INDEX=salaries2014_top$JobTitle,FUN=density)
+ylim<-range(sapply(perGroupDensity,function(x){range(x$y)}))
+cols<-rainbow(length(perGroupDensity)+1) #I ask for 1 more than I need, because in this case it gives better colors
+cols<-head(cols,-1)
+par(mfrow=c(1,1))
+plot(density(salaries2014_top$TotalPay),main="Total Pay, by job title",lwd=2,lty=2,ylim=ylim,sub="Top 10 most common full-time")
+nullOut<-mapply(perGroupDensity,cols,FUN=function(x,col){lines(x,col=col)})
+legend("topright",legend=c(levels(salaries2014_top$JobTitle),"Combined"),col=c(cols,"black"),lty=c(rep(1,length(cols)),2),lwd=3)
+```
+
+Now I am going to make a violin plot. First I need to load the package that has the function, since this is not a standard function in R.
+
+```{r }
+library(vioplot)
+```
+
+If that command gave you an error, you need to install the package  ` vioplot `  uncommenting the next code:
+
+```{r }
+# install.packages("vioplot")
+# library(vioplot)
+```
+
+Now I call vioplot on my flight departure data.
+
+```{r }
+vioplot(salaries2014_FT$TotalPay)
+```
+
+Now I want to make violin plots for each of my airlines like I did with boxplots. I am going to read in the function I provided for you.  ` source `  reads in R code in a file, and I have placed online code defining a function  ` vioplot2 `  that will do this easily.
+
+```{r }
+source("http://www.stat.berkeley.edu/~epurdom/RcodeForClasses/myvioplot.R")
+```
+
+Once I have done this, I can plot the violin plots of the departure delays, divided by group.
+
+```{r }
+par(mar=c(10,4.1,4.1,.1))
+vioplot2(salaries2014_top$TotalPay,salaries2014_top$JobTitle,col=cols, las=3,ylab="Salary (in dollars)")
+```
+
+Notice I set the color argument,  ` col `  based on colors from the function ` rainbow `. Another option if you need fewer colors than here is ` palette() ` .  ` palette() `  just returns a list of default colors -- a quick way to get a list of colors in R. (All the colors available by name can be found by  ` colors() ` )

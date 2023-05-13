@@ -1,0 +1,729 @@
+# Some example dataset for Regression
+We go through some example datasets to illustrate the utility of the regression model.
+
+Set the right working directory (you need to change the directory to the local directory in your machine containing the data)
+
+```{r }
+dataDir<-"../finalDataSets"
+```
+
+The following is housing price data from Ames, Iowa. 
+The full dataset is available at https://ww2.amstat.org/publications/jse/v19n3/decock/AmesHousing.txt
+A description of the full dataset is at https://ww2.amstat.org/publications/jse/v19n3/decock/DataDocumentation.txt 
+We will be working with a slightly smaller version of the full dataset. 
+We read in the dataset:
+
+```{r }
+dd = read.csv(file.path(dataDir, "Ames_Short.csv"), header = T,stringsAsFactors=TRUE)
+```
+
+To explore the data, we will perform a pairs plot.
+
+```{r }
+pairs(dd)
+```
+
+
+The next dataset is the bike rental company. The dataset can also be found here (https://archive.ics.uci.edu/ml/datasets/Bike+Sharing+Dataset) 
+We again read in the data and convert some of the variables to factors.
+
+```{r }
+bike <- read.csv(file.path(dataDir, "DailyBikeSharingDataset.csv"),stringsAsFactors=TRUE)
+bike$yr<-factor(bike$yr)
+bike$mnth<-factor(bike$mnth)
+```
+
+We do a pairs plot of only the continuous variables
+
+```{r }
+pairs(bike[,11:16])
+```
+
+The final dataset is the bodyfat dataset which gives estimates of the percentage of body fat determined by underwater weighing and various body circumference measurements for 252 men. Further explanation of the dataset can be found at http://lib.stat.cmu.edu/datasets/bodyfat
+
+```{r }
+body = read.csv(file.path(dataDir, "bodyfat_short.csv"), header = T,stringsAsFactors=TRUE)
+pairs(body)
+```
+
+We can see that there are outliers in the data, which we can try to identify by their values on specific variables.
+
+```{r }
+ou1 = which(body$HEIGHT < 30)
+ou2 = which(body$WEIGHT > 300)
+ou3 = which(body$HIP > 120)
+ou = c(ou1, ou2, ou3)
+```
+
+We replot the data after removing these outliers and observed that we can see the data much better.
+
+```{r }
+pairs(body[-ou,])
+```
+
+
+# Interpreting the variables
+Here we plot the pairs plot of two highly correlated variables.
+
+```{r }
+pairs(body[,c("BODYFAT","THIGH","ABDOMEN")])
+```
+
+To understand what the coefficient in regression means, we can consider a coplot, which divides the data. It takes a formula like ` lm `, but also includes a condition `|`, meaning that the plot of ` BODYFAT ~ THIGH ` will be plotted, for different ranges of ` ABDOMEN `
+
+```{r }
+coplot(BODYFAT~THIGH|ABDOMEN,data=body)
+```
+
+The reverse looks quite different, showing that the plot is *not* symmetric.
+
+```{r }
+coplot(BODYFAT~ABDOMEN | THIGH,data=body)
+```
+
+# The Regression model.
+Here, we plot the response (body fat pct) against all the predictors.
+
+```{r }
+par(mfrow = c(3, 3))
+for(i in 2:8)
+{
+    plot(body[-ou,i], body[-ou,1], xlab = names(body)[i], ylab = "BODYFAT")
+    }
+par(mfrow = c(1, 1))
+```
+
+Now we fit our linear model with all of the variables:
+
+```{r }
+ft = lm(BODYFAT ~ AGE + WEIGHT + HEIGHT + CHEST + ABDOMEN + HIP + THIGH, data = body)
+summary(ft)
+```
+
+
+If we want to use all of the variables in a dataset, we can use a simpler notation, that keeps us from having to write out all of the variable names:
+
+```{r }
+ft = lm(BODYFAT ~ . , data = body)
+```
+
+Even if we want to use all but *a few* variables, it can be easier to use this notation, and just subset the dataset, e.g. ` data= body[, -4] ` 
+
+Here we show the example of doing the linear regression, only after scaling the explanatory variables. Now the coefficients are comparable, as the amount of change for one *standard deviation* change of the variable. Notice that we have to remove the response variable, *before* scaling.
+
+```{r }
+tempBody<-body
+tempBody[,-1]<-scale(tempBody[,-1])
+ftScale = lm(BODYFAT ~ . , data = tempBody)
+cat("Coefficients with variables scaled:\n")
+coef(ftScale)
+cat("Coefficients on original scale:\n")
+coef(ft)
+sdVar<-apply(body[,-1],2,sd)
+cat("Sd per variable:\n")
+sdVar
+cat("Ratio of scaled lm coefficient to original lm coefficient\n")
+coef(ftScale)[-1]/coef(ft)[-1]
+```
+
+## Correlated variables
+We find the correlation between chest circumference and abdomen circumference
+
+```{r }
+cor(body[,c("HIP","THIGH","ABDOMEN","CHEST")])
+```
+
+
+We change our regression, and now drop the variables Abdomen and Hip. We see that this affects the coefficients of our model for the variables that remain.
+
+```{r }
+ft1 = lm(BODYFAT ~ AGE + WEIGHT + HEIGHT + CHEST + HIP, data = body) 
+# Including abdomen
+round(coef(ft),4)
+# Excluding abdomen
+round(coef(ft1),4)
+```
+
+
+To find the fitted values in R we can use the function ` fitted ` as applied to the ` lm ` output that we saved earlier:
+
+```{r }
+head(fitted(ft))
+```
+
+
+Here we plot fitted values against response
+
+```{r }
+plot(fitted(ft), body$BODYFAT, xlab = "Fitted Values", ylab = "Bodyfat Percentage")
+```
+
+
+The correlation of these two variables is $R^2$, the Coefficient of Determination, or Multiple $R^2$, which is reported in the summary of the ` lm ` object:
+
+```{r }
+cor(body$BODYFAT, fitted(ft))^2
+summary(ft)
+```
+
+
+We can also pull out the residuals with the function ` residuals `
+
+```{r }
+head(residuals(ft))
+```
+
+
+We can then make the common plot, residuals plotted against the fitted values
+
+```{r }
+plot(fitted(ft), residuals(ft), xlab = "Fitted Values", ylab = "Residuals")
+```
+
+
+We can also plot the residuals against each of the explanatory variables
+
+```{r }
+par(mfrow = c(3, 3))
+for(i in 2:8)
+{
+    plot(body[,i], ft$residuals, xlab = names(body)[i], ylab = "Residuals")
+    }
+par(mfrow = c(1, 1))
+```
+
+Note here the presence of the outliers. 
+
+We can look at the RSS after removing the variable Abdomen. Notice how I can pull out the information shown in summary to access it (here I did ` summary(ft.1)$r.squared ` to get the $R^2$; similarly ` summary(ft.1)$coef ` would pull out the matrix of coefficients *with the p-values*).
+
+```{r }
+ft.1 = lm(BODYFAT ~ AGE + WEIGHT + HEIGHT + CHEST + HIP + THIGH, data = body)
+rss.ft1 = summary(ft.1)$r.squared
+rss.ft1
+```
+
+Compare this to the RSS of the full regression. 
+
+```{r }
+summary(ft$r.squared)
+```
+
+
+# Categorical Variables
+We will now bring in the scorecard data on colleges from 2016. 
+
+```{r }
+scorecard <- read.csv(file.path(dataDir, "college.csv"),stringsAsFactors=TRUE)
+```
+
+Here we fit our lm, treating the CONTROL variable (the private/public/etc) as numeric. 
+
+```{r }
+req.bad = lm(RET_FT4~ TUITIONFEE_OUT + CONTROL, data = scorecard)
+summary(req.bad)
+```
+
+We can check that R does think CONTROL is a numeric variable with `is.numeric` 
+
+```{r }
+is.numeric(scorecard$CONTROL)
+```
+
+
+Instead we need to treat this variable as a factor.
+
+```{r }
+req = lm(RET_FT4~ TUITIONFEE_OUT + as.factor(CONTROL), data = scorecard)
+summary(req)
+```
+
+
+It is generally better, however, to actually fix it in your data.frame as a factor. That way you won't accidentally mess up, and all the various R commands you might do (` plot `, ` summary ` etc) will treat it correctly.
+
+```{r }
+scorecard$CONTROL<-factor(scorecard$CONTROL,levels=c(1,2,3),labels=c("public","private","private for-profit"))
+```
+
+Now the regression will just know it should be a factor.
+
+```{r }
+req = lm(RET_FT4~ TUITIONFEE_OUT + CONTROL, data = scorecard)
+summary(req)
+```
+
+
+Now we add an interaction between the continuous variable (TUITIONFEE_OUT) and the categorical, meaning we will get a different slope for each group. Interactions are given by putting a ` : ` between the two variables.
+
+```{r }
+req.1 = lm(RET_FT4~ TUITIONFEE_OUT + CONTROL + TUITIONFEE_OUT:CONTROL, data = scorecard) 
+summary(req.1)
+```
+
+
+Alternatively, it is more common to just do ` TUITIONFEE_OUT * CONTROL ` which is equivalent to `TUITIONFEE_OUT + CONTROL + TUITIONFEE_OUT:CONTROL`, in other words, you put in both the individual terms and their interactions. This is the most common way to do it.
+
+```{r }
+summary(lm(RET_FT4~ TUITIONFEE_OUT * CONTROL, data = scorecard) )
+```
+
+
+Now we fit a linear model for the bike data, with two categorical variables.
+
+```{r }
+md1 = lm(casual ~ atemp + workingday + weathersit, data = bike)
+summary(md1)
+```
+
+
+Now we add a different slope of ` atemp ` for each of the ` workingday ` levels by putting in an interaction.
+
+```{r }
+md3 = lm(casual ~ atemp + workingday + weathersit +
+    workingday: atemp , data = bike)  
+summary(md3)
+```
+
+
+# Inference
+## The Global Fit
+Here we create a function that will implement the permutation test to test for the global fit.
+
+```{r }
+set.seed(147980)
+permutationLM <- function(y,data,  n.repetitions, STAT=function(lmFit){summary(lmFit)$r.squared}){ 
+  # calculate the observed statistic
+  stat.obs <- STAT(lm(y ~ ., data=data))
+  #function to do the permutation and return statistic
+  makePermutedStats<-function(){
+      sampled <- sample(y) 
+      fit<-lm(sampled ~ ., data=data)
+      return(STAT(fit))
+  }
+  # calculate the permuted statistic
+  stat.permute <-replicate(n.repetitions,makePermutedStats()) 
+  p.value <- sum(stat.permute >= stat.obs) / n.repetitions
+  return(list(p.value=p.value,observedStat=stat.obs,permutedStats=stat.permute))
+}
+```
+
+We now apply it to our bodyfat data, using $R^2$ as our statistic, and not surprisingly get very significant results.
+
+```{r }
+permOut<-permutationLM(body$BODYFAT,data=body[,-1],n.repetitions=1000)
+hist(permOut$permutedStats,breaks=50)
+permOut[1:2]
+```
+
+We can also use the $F$ statistic and compare the permutation distribution to the $F$ distribution. The $F$ distribution is an approximation of the permutation distribution for large sample sizes, so not surprisingly they are similar.
+
+```{r }
+n<-nrow(body)
+p<-ncol(body)-1
+permOutF<-permutationLM(body$BODYFAT,data=body[,-1],n.repetitions=1000, STAT=function(lmFit){summary(lmFit)$fstatistic["value"]})
+hist(permOutF$permutedStats,freq=FALSE,breaks=50)
+curve(df(x,df1=p,df2=n-p-1),add=TRUE, main=paste("F(",p,",",n-p-1,") distribution"))
+permOutF[1:2]
+```
+
+## Variable importance
+*Bootstrap Confidence Intervals* The following function creates bootstrap confidence intervals for the linear regression, and is quite similar to the one I used for simple regression.
+
+```{r }
+bootstrapLM <- function(y,x, repetitions, confidence.level=0.95){
+    # calculate the observed statistics
+  stat.obs <- coef(lm(y~., data=x))
+  # calculate the bootstrapped statistics
+  bootFun<-function(){
+	  sampled <- sample(1:length(y), size=length(y),replace = TRUE)
+	  coef(lm(y[sampled]~.,data=x[sampled,])) #small correction here to make it for a matrix x
+  }  
+  stat.boot<-replicate(repetitions,bootFun())
+  # nm <-deparse(substitute(x))
+  # row.names(stat.boot)[2]<-nm
+  level<-1-confidence.level
+  confidence.interval <- apply(stat.boot,1,quantile,probs=c(level/2,1-level/2))
+    return(list(confidence.interval = cbind("lower"=confidence.interval[1,],"estimate"=stat.obs,"upper"=confidence.interval[2,]), bootStats=stat.boot))
+}
+```
+
+Now we apply it to the Bodyfat dataset. 
+
+```{r }
+bodyBoot<-with(body,bootstrapLM(y=BODYFAT,x=body[,-1],repetitions=10000))
+bodyBoot$conf
+```
+
+We can do plots of the confidence intervals (excluding the intercept) with ` plotCI `
+
+```{r }
+require(gplots)
+#Not include intercept
+with(bodyBoot,plotCI(confidence.interval[-1,"estimate"],ui=confidence.interval[-1,"upper"],li=confidence.interval[-1,"lower"],xaxt="n"))
+axis(side=1,at=1:(nrow(bodyBoot$conf)-1),rownames(bodyBoot$conf)[-1])
+
+cat("Ratio of p/n in body fat: ",ncol(body)/nrow(body),"\n")
+
+
+
+
+
+library(pheatmap)
+pheatmap(summary(ft,correlation=TRUE)$corr[-1,-1],breaks=seq(-1,1,length=100), main="Correlation of the estimated coefficients")
+pheatmap(cor(body[,-1]),breaks=seq(-1,1,length=100), main="Correlation of the variables")
+```
+
+## Prediction Intervals
+We can create confidence intervals for the prediction using the ` predict ` function. We first have to create a data.frame in the same format as our data.frame that was used in our ` lm ` model (i.e. same variable names).
+
+```{r }
+x0 = data.frame(AGE = 30, WEIGHT = 180, HEIGHT = 70, CHEST = 95, ABDOMEN = 90, HIP = 100, THIGH = 60)
+```
+
+Now we can create confidence intervals for the average predicted value, with ` interval = "confidence" `
+
+```{r }
+predict(ft, x0, interval = "confidence")
+```
+
+For prediction intervals, i.e. the expected range of values for an *individual*, we set ` interval = "prediction" `
+
+```{r }
+predict(ft, x0, interval = "prediction")
+```
+
+
+# Regression diagnostics
+If we run ` plot ` on our output from `lm`, it will automatically plot four diagnostic plots. Note that if I don't set `par(mfrow = c(2, 2))`, it will go into "interactive" mode, and expect you to hit return to see the next plot.
+
+```{r }
+par(mfrow = c(2, 2))
+plot(ft)
+par(mfrow = c(1, 1))
+```
+
+
+We can also choose to plot only certain of these plots with the ` which ` argument. There are six plots to choose from, even though only 4 are done by default. 
+
+```{r }
+par(mfrow=c(1,2))
+plot(ft,which=c(1,3))
+```
+
+Here we do the same plots for the bike data (we refit the model just for convenience to remember the model)
+
+```{r }
+md1 = lm(casual ~ atemp + workingday + weathersit, data = bike)
+par(mfrow=c(1,2))
+plot(md1,which=c(1,3))
+```
+
+Since there is keteroskedasticity, we consider transformations of our response (log and sqrt):
+
+```{r }
+mdLog = lm(log(casual) ~ atemp + workingday + weathersit, data = bike)
+mdSqrt= lm(sqrt(casual) ~ atemp + workingday + weathersit, data = bike)
+par(mfrow=c(2,2))
+plot(mdLog,which=1,main="Log")
+plot(mdSqrt,which=1,main="Sqrt")
+plot(mdLog,which=3,main="Log")
+plot(mdSqrt,which=3,main="Sqrt")
+
+
+
+
+
+
+
+
+
+
+
+
+# Here we plot only the QQ plot
+par(mfrow=c(1,1))
+plot(ft,which=2)
+
+# And the QQ plot for the different bike models
+par(mfrow=c(2,2))
+plot(md1,which=2,main="Original (counts)")
+plot(mdLog,which=2,main="Log")
+plot(mdSqrt,which=2,main="Sqrt")
+```
+
+Plots 4 and 5 are useful for detecting outliers. 4 is the plot of cook's distance, showing observations that will change the fit a lot if removed. 5 is the plot of the residuals versus the leverage of the observations, which gives similar information. 
+
+```{r }
+par(mfrow=c(1,2))
+plot(ft,which=c(4:5))
+```
+
+Here we look at these outlying points seen in the plots.
+
+```{r }
+whOut<-c(39, 42, 36)
+cat("High leverage points:\n")
+body[whOut,]
+cat("Mean of each variables:\n")
+apply(body, 2, mean)
+```
+
+We can do a PCA of the explanatory variables and see that these points are separated. Notice how I can use the `text ` function to plot character values, in this case in the indices of the outlier points, instead of points. To not have a point also drawn for these points, I first made a blank plot by choosing `type="n"`, and then did points for all points *except* the outlier. Then I used `text` to plot the indices of the outlier points. The blank plot is important, because it makes sure that the limits of the plot will be big enough for all the points; if I just drew the plot excluding the outliers (` e.g. plot(bodyPca$x[-whOut,1:2]) `), the boundaries wouldn't be big enough to show the outlying points when you add them.
+
+```{r }
+bodyPca<-prcomp(body[,-1])
+plot(bodyPca$x[,1:2],type="n")
+points(bodyPca$x[-whOut,1:2])
+text(bodyPca$x[whOut,1:2],labels=whOut,col="red",pch=19)
+```
+
+We can also do a pairs plot that highlights these points in a similar way, only putting the plotting commands in the ` panel ` argument. Because it's in a panel function, you don't need the blank plot, and you use only plotting commands that *add to* an existing plot (like `points ` and ` text `).
+
+```{r }
+pairs(body,panel=function(x,y){
+    points(x[-whOut],y[-whOut])
+    text(x[whOut],y[whOut],labels=whOut)})
+```
+
+I can run the linear model excluding those observations and compare the coefficients. Notice how I use ` summary(ftNoOut)$coef ` to get the full table of coefficients, including the p-values.
+
+```{r }
+ftNoOut<-lm(BODYFAT~.,data=body[-whOut,])
+cat("Coefficients without outliers:\n")
+round(summary(ftNoOut)$coef,3)
+cat("\nCoefficients in Original Model:\n")
+round(summary(ft)$coef,3)
+```
+
+# Variable Selection
+We first introduce the car seat position dataset, which is provided as part of the package ` faraway `. We do a basic linear model on this data set and look at the summary of the model.
+
+```{r }
+library(faraway)
+data(seatpos)
+pairs(seatpos)
+lmSeat = lm(hipcenter ~ ., seatpos)
+summary(lmSeat)
+```
+
+
+To compare a submodel to a full model using a F-test, I first need to run `lm` on both of these models:
+
+```{r }
+mod0<-lm(BODYFAT~ABDOMEN+AGE+WEIGHT,data=body)
+```
+
+Then I run the command ` anova ` on these two models. 
+
+```{r }
+anova(mod0,ft)
+```
+
+Note that ` anova ` does other kinds of analysis if you give it only *one* linear model that is somewhat distinct from this analysis, but we are not going to get into it.
+
+Here we also do a F-test for a submodel, only now we're only missing a single variable (`HEIGHT`).
+
+```{r }
+modNoHEIGHT<-lm(BODYFAT~ABDOMEN+AGE+WEIGHT+CHEST+HIP+THIGH,data=body)
+anova(modNoHEIGHT,ft)
+```
+
+We can see that we get the same result as if we did a t-test for the coefficient corresponding to `HEIGHT`. 
+
+```{r }
+summary(ft)
+```
+
+We can use the function `regsubsets` in the package `leaps` to find the best model of size k, for all values of k. Here we apply it to the bodyfat data:
+
+```{r }
+library(leaps)
+bFat = regsubsets(BODYFAT ~ ., body)
+summary(bFat)
+```
+
+Here is the same function for the car seat position data.
+
+```{r }
+bSeat = regsubsets(hipcenter ~ ., seatpos)
+summary(bSeat)
+```
+
+The object ` summary(bFat) ` stores all of this information. In particular, the `summary(bFat)$which` gives a matrix of logical values with a column for each variable and a row for each value of k. The logical indicates whether the variable is contained in the best model of size k. 
+
+Here we illustrate the idea of dividing our data into test and training data. We choose to make our test data a random 10% of the data, and our training dataset the rest.
+
+```{r }
+set.seed(1249)
+nTest<-.1*nrow(body)
+whTest<-sample(1:nrow(body),size=nTest)
+bodyTest<-body[whTest,]
+bodyTrain<-body[-whTest,]
+```
+
+Now we can calculate the prediction error on each of the best models found from `regsubsets`. We will, for each row of  `summary(bFat)$which` fit the model on the training data with only the variables indicated should be used in the best model. And then we will evaluate their performance on the test data. The average error on the test data will be our estimate of predicted error. 
+
+```{r }
+predError<-apply(summary(bFat)$which[,-1],1,function(x){
+    lmObj<-lm(bodyTrain$BODYFAT~.,data=bodyTrain[,-1][,x,drop=FALSE])
+    testPred<-predict(lmObj,newdata=bodyTest[,-1])
+    mean((bodyTest$BODYFAT-testPred)^2)
+})
+cat("Predicted error on random 10% of data:\n")
+predError
+```
+
+Here we repeat the whole thing, only with a different random test and training to show the variability in our estimate of predicted error (and thus variability in which is the "best" model).
+
+```{r }
+set.seed(19085)
+nTest<-.1*nrow(body)
+whTest<-sample(1:nrow(body),size=nTest)
+bodyTest<-body[whTest,]
+bodyTrain<-body[-whTest,]
+
+predError<-apply(summary(bFat)$which[,-1],1,function(x){
+    lmObj<-lm(bodyTrain$BODYFAT~.,data=bodyTrain[,-1][,x,drop=FALSE])
+    testPred<-predict(lmObj,newdata=bodyTest[,-1])
+    mean((bodyTest$BODYFAT-testPred)^2)
+})
+cat("Predicted error on random 10% of data:\n")
+predError
+```
+
+Now we will implement cross-validation, where we will break our data into random 10 parts, to compare the prediction error of each of these eight models. We will do this by first randomly permuting the indices of the data
+
+```{r }
+set.seed(78912)
+permutation<-sample(1:nrow(body))
+```
+
+Then we will assign the first 10% of the permuted data to partition 1, the second to partition 2, etc. The object `folds` we create here just simply divides the numbers 1-n into ten parts (i.e. no randomness). But now if I take `permutation[folds==1]` I will get the indices of the first random partition of the data, `permutation[folds==2]` corresponds to the second one, and so forth.
+
+```{r }
+folds <- cut(1:nrow(body),breaks=10,labels=FALSE)
+#Perform 10 fold cross validation
+```
+
+Now we will perform a for-loop, so that we will take turns making the each partition the test data, and the rest are the training. `predErrorMat` is a matrix we set up that will hold the results of our for-loop. Each row will correspond to the results of one of the partitions, and each column will correspond to a model.
+
+```{r }
+predErrorMat<-matrix(nrow=10,ncol=nrow(summary(bFat)$which))
+for(i in 1:10){
+    #Segement your data by fold using the which() function 
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- body[permutation,][testIndexes, ]
+    trainData <- body[permutation,][-testIndexes, ]
+    #Use the test and train data partitions however you desire...
+    predError<-apply(summary(bFat)$which[,-1],1,function(x){
+        lmObj<-lm(trainData$BODYFAT~.,data=trainData[,-1][,x,drop=FALSE])
+        testPred<-predict(lmObj,newdata=testData[,-1])
+        mean((testData$BODYFAT-testPred)^2)
+    })
+    predErrorMat[i,]<-predError
+}
+predErrorMat
+```
+
+To get the cross-validation estimate of expected predicted error, we average across the 10 folds.
+
+```{r }
+colMeans(predErrorMat)
+```
+
+Leave-one-out CV uses each individual observation as a test set. For regression, it can be calculated from the residuals of the linear model. I give a function here that calculates it (you don't need to understand why it works).
+
+```{r }
+LOOCV<-function(lm){
+    vals<-residuals(lm)/(1-lm.influence(lm)$hat)
+    sum(vals^2)/length(vals)
+}
+```
+
+Now I create a function that will calculate all of these criterion of interest for a submodel. `y` should be the response and `dataset` should be the data.frame with *all* of the p variables. Either the argument `x` or the argument `lmObj` should be given to define which submodel to use. If `x`, then `x` is assumed to be a logical vector in the same order as the columns of `dataset` defining with variables to use, and the function will run `lm` on that submodel; if `lmObj`, then it should be the result of running `lm` on the submodel.
+
+```{r }
+calculateCriterion<-function(x=NULL,y,dataset,lmObj=NULL){
+    #dataset contains only explanatory variables
+    #x is a vector of logicals, length equal to number of explanatory variables in dataset, telling us which variables to keep
+    #sigma2 is estimate of model on full dataset
+    # either x or lmObj must be given to specify the smaller lm model
+    sigma2=summary(lm(y~.,data=dataset))$sigma^2
+    if(is.null(lmObj)) lmObj<-lm(y ~ ., data=dataset[,x,drop=FALSE]) #don't include intercept
+    sumlmObj<-summary(lmObj)
+    n<-nrow(dataset)
+    p<-sum(x)
+    RSS<-sumlmObj$sigma^2*(n-p-1)
+    c(R2=sumlmObj$r.squared,
+        R2adj=sumlmObj$adj.r.squared,
+        "RSS/n"=RSS/n,
+        LOOCV=LOOCV(lmObj),
+        Cp=RSS/n+2*sigma2*(p+1)/n,
+        CpAlt=RSS/sigma2-n+2*(p+1),
+        AIC=AIC(lmObj), # n*log(RSS/n)+2*p +constant,
+        BIC=BIC(lmObj) # n*log(RSS/n)+p*log(n) + constant
+    )
+}
+```
+
+Here we apply my function to the 8 best model of each size found for the car seat position data.
+
+```{r }
+cat("Criterion for the 8 best k-sized models of car seat position:\n")
+critSeat<-apply(summary(bSeat)$which[,-1],1,calculateCriterion,
+    y=seatpos$hipcenter,
+    dataset=seatpos[,-9])
+critSeat<-t(critSeat)
+critSeat
+```
+
+Here we apply my function to the 7 best model of each size found for the body fat data.
+
+```{r }
+cat("\nCriterion for the 7 best k-sized models of body fat:\n")
+critBody<-apply(summary(bFat)$which[,-1],1,calculateCriterion,
+    y=body$BODYFAT,
+    dataset=body[,-1])
+critBody<-t(critBody)
+critBody<-cbind(critBody,CV10=colMeans(predErrorMat))
+critBody
+```
+
+The function `step` will run a stepwise regression based on the AIC. The input object should be the full linear regression model (i.e. with all of the variables). Here we set the argument `trace =0` to keep it from printing out the path it takes, but note that this isn't the default. It can be useful to see the printout, which shows you the variables that are added or removed at each step, but for reports it can be good to suppress it. In the end, the output that is returned by the function is just the linear model object from running `lm` on the final choice of variables.
+
+```{r }
+outBody<-step(ft,trace=0, direction="both")
+outBody
+```
+
+The default version of the `step ` function only removes variables (analogous to backward elimination). If one wants to add variables as well, you can set the argument `direction` as we have done here.
+We compare the results of the linear model found by step to those found by looking at the RSS of all subsets. 
+
+```{r }
+# results from best of size k
+summary(bFat)$out
+# results from criterion of best of each size k
+critBody
+```
+
+We repeat the stepwise for the car seat data. 
+
+```{r }
+outCarseat<-step(lmSeat,trace=0, direction="both")
+outCarseat
+```
+
+And we again compare it to the best we found from all subsets.
+
+```{r }
+# results from best of size k
+summary(bSeat)$out
+# results from criterion of best of each size k
+critSeat
+```
+
+We can also use the function I created above on this output by giving it to the `lmObj` argument.
+
+```{r }
+calculateCriterion(lmObj=outCarseat,y=seatpos$hipcenter,dataset=seatpos[,-9])
+```
+
